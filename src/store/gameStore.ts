@@ -36,15 +36,34 @@ const DEFAULT_USERS: User[] = [
 const loadUsers = (): User[] => {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
-    return stored ? JSON.parse(stored) : DEFAULT_USERS;
+    if (!stored) return DEFAULT_USERS;
+    const parsed: User[] = JSON.parse(stored);
+    // Migration: earlier versions wrote the signed-in user (Firebase uid as id)
+    // into the guest slot. Reset player1 if it doesn't look like a local guest.
+    if (parsed[0] && parsed[0].id !== DEFAULT_USERS[0].id) {
+      parsed[0] = DEFAULT_USERS[0];
+    }
+    if (!parsed[1]) parsed[1] = DEFAULT_USERS[1];
+    return parsed;
   } catch {
     return DEFAULT_USERS;
   }
 };
 
 const saveUsers = (users: User[]) => {
+  // Only persist player1 if it looks like the local guest (default id).
+  // A signed-in player has the Firebase uid as id — we keep their stats in
+  // Firestore and leave the local guest snapshot alone, so signing out
+  // restores the *guest* identity, not the previously signed-in account.
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(users));
+    const existing = loadUsers();
+    const incomingP1 = users[0];
+    const player1 =
+      incomingP1 && incomingP1.id === DEFAULT_USERS[0].id
+        ? incomingP1
+        : existing[0] ?? DEFAULT_USERS[0];
+    const player2 = users[1] ?? existing[1] ?? DEFAULT_USERS[1];
+    localStorage.setItem(STORAGE_KEY, JSON.stringify([player1, player2]));
   } catch (e) {
     console.error('Failed to save users:', e);
   }

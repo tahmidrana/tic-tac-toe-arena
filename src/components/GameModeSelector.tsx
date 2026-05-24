@@ -27,9 +27,9 @@ export function GameModeSelector({
             : 'text-slate-400 hover:text-white hover:bg-white/5'
         }`}
       >
-        <span>🤖</span>
-        <span className="hidden sm:inline">vs Computer</span>
-        <span className="sm:hidden">AI</span>
+        <span>🎯</span>
+        <span className="hidden sm:inline">vs Random Player</span>
+        <span className="sm:hidden">Random</span>
       </button>
     </div>
   );

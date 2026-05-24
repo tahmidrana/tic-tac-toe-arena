@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useGameStore } from '../store/gameStore';
 import { Confetti } from './Confetti';
 import { WinAnimation } from './WinAnimation';
@@ -7,6 +8,27 @@ import { GameModeSelector } from './GameModeSelector';
 import { SettingsModal } from './SettingsModal';
 import { type BoardSize } from './BoardSizeSelector';
 import { AIPlayer, Difficulty } from '../utils/aiPlayer';
+import { randomOpponentName } from '../utils/opponentNames';
+
+// Random think time that fits comfortably under the 15s turn timer.
+const randomThinkMs = (): number => 1800 + Math.floor(Math.random() * 5200);
+
+// Weighted random matchmaking wait — feels like a real online queue.
+// 65% quick (2–5s), 25% medium (5–9s), 10% slow (9–15s).
+const randomMatchmakingMs = (): number => {
+  const r = Math.random();
+  if (r < 0.65) return 2000 + Math.floor(Math.random() * 3000);
+  if (r < 0.9) return 5000 + Math.floor(Math.random() * 4000);
+  return 9000 + Math.floor(Math.random() * 6000);
+};
+
+const SEARCH_MESSAGES = [
+  'Searching for opponent…',
+  'Looking through online players…',
+  'Finding a worthy opponent…',
+  'Matching by skill level…',
+  'Almost there…',
+];
 
 export function TicTacToe() {
   const { users, recordWin, recordLoss, recordDraw, renameUser } = useGameStore();
@@ -29,9 +51,18 @@ export function TicTacToe() {
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   // Game is idle (board disabled) until the user explicitly starts a game.
   const [gameStarted, setGameStarted] = useState(false);
+  // "Searching for opponent..." overlay before each Random-Player match.
+  const [matchmaking, setMatchmaking] = useState(false);
+  const [searchMessage, setSearchMessage] = useState(SEARCH_MESSAGES[0]);
+  const [searchElapsed, setSearchElapsed] = useState(0);
+  // Portal target in the right column for player stats.
+  const [statsSlot, setStatsSlot] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    setStatsSlot(document.getElementById('player-stats-slot'));
+  }, []);
 
   const player1 = users[0] || { id: '1', name: 'Player 1', wins: 0, losses: 0, draws: 0 };
-  const player2 = users[1] || { id: '2', name: 'Computer', wins: 0, losses: 0, draws: 0 };
+  const player2 = users[1] || { id: '2', name: 'Random Player', wins: 0, losses: 0, draws: 0 };
 
   // Get the win length based on board size
   const getWinLength = (size: number): number => {
@@ -143,7 +174,7 @@ export function TicTacToe() {
       setBoard(newBoard);
       setIsXNext(true);
       setAiThinking(false);
-    }, 600);
+    }, randomThinkMs());
   };
 
   const handleClick = (index: number) => {
@@ -224,7 +255,22 @@ export function TicTacToe() {
   const confirmReset = () => {
     setShowResetConfirm(false);
     resetGame();
-    setGameStarted(true);
+    if (gameMode === 'ai') {
+      // "Searching for opponent…" flash before each Random Player match.
+      // Wait time is random (up to 15s) so it feels like a real queue.
+      setMatchmaking(true);
+      setSearchElapsed(0);
+      setSearchMessage(SEARCH_MESSAGES[0]);
+      const newOpponent = randomOpponentName();
+      const wait = randomMatchmakingMs();
+      setTimeout(() => {
+        renameUser(player2.id, newOpponent);
+        setMatchmaking(false);
+        setGameStarted(true);
+      }, wait);
+    } else {
+      setGameStarted(true);
+    }
   };
 
   const resetGame = () => {
@@ -244,9 +290,9 @@ export function TicTacToe() {
     setGameStarted(false); // mode change should NOT auto-start a game
     // Update player 2 name based on mode
     if (mode === 'ai') {
-      users[1] = { ...users[1], name: 'Computer' };
+      renameUser(player2.id, randomOpponentName());
     } else {
-      users[1] = { ...users[1], name: 'Player 2' };
+      renameUser(player2.id, 'Player 2');
     }
   };
 
@@ -284,25 +330,48 @@ export function TicTacToe() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  // Rotate the matchmaking message + tick an elapsed counter while searching.
+  useEffect(() => {
+    if (!matchmaking) return;
+    let idx = 0;
+    const msgInterval = setInterval(() => {
+      idx = (idx + 1) % SEARCH_MESSAGES.length;
+      setSearchMessage(SEARCH_MESSAGES[idx]);
+    }, 2200);
+    const tickInterval = setInterval(() => {
+      setSearchElapsed((s) => s + 1);
+    }, 1000);
+    return () => {
+      clearInterval(msgInterval);
+      clearInterval(tickInterval);
+    };
+  }, [matchmaking]);
+
   // Reset the turn timer whenever the active turn changes
   // (board change = a move was just made; mode/end-of-game also resets).
   useEffect(() => {
     setTimeLeft(TURN_SECONDS);
   }, [board, gameMode, gameOver]);
 
-  // Timer applies only to human turns: PvP both players, AI mode only when X (human) moves.
+  // Timer runs for both players (humans and the simulated random opponent).
+  // In AI mode, the opponent moves well within the 15s window thanks to
+  // randomThinkMs(), so the human-only auto-play branch below stays correct.
   const timerActive =
     gameStarted &&
     !gameOver &&
-    !aiThinking &&
     !showSettings &&
-    (gameMode === 'pvp' || isXNext);
+    !matchmaking;
 
   // Countdown + auto-play random on timeout.
   useEffect(() => {
     if (!timerActive) return;
 
     if (timeLeft <= 0) {
+      // Don't auto-play for the opponent — they'll move via their own
+      // setTimeout (which always fires before 15s). Only humans time out.
+      const isOpponentTurn = gameMode === 'ai' && !isXNext;
+      if (isOpponentTurn) return;
+
       const empties: number[] = [];
       for (let i = 0; i < board.length; i++) {
         if (board[i] === null) empties.push(i);
@@ -353,10 +422,6 @@ export function TicTacToe() {
   const padding = screenWidth < 640 ? 8 : 16;
   const squareSize = getSquareSize();
 
-  const getDifficultyLabel = () => {
-    const labels = { easy: 'Easy', medium: 'Medium', hard: 'Hard' };
-    return labels[difficulty];
-  };
 
   return (
     <div className="space-y-3 sm:space-y-4">
@@ -435,24 +500,48 @@ export function TicTacToe() {
 
       {/* Game Card */}
       <div
-        className={`rounded-2xl border backdrop-blur-md shadow-xl overflow-hidden transition-all duration-300 ${
+        className={`relative rounded-2xl border backdrop-blur-md shadow-xl overflow-hidden transition-all duration-300 ${
           gameOver && winner !== 'draw' && winner !== null
             ? 'bg-slate-900/80 border-yellow-500/30 shadow-yellow-500/10 animate-pulse-board'
             : 'bg-slate-900/70 border-white/8'
         }`}
       >
+        {/* Matchmaking overlay */}
+        {matchmaking && (
+          <div className="absolute inset-0 z-20 bg-slate-900/85 backdrop-blur-md flex items-center justify-center px-6 py-8">
+            <div className="flex flex-col items-center gap-4 text-center animate-bounce-in max-w-xs">
+              <div className="relative w-20 h-20">
+                <div className="absolute inset-0 rounded-full border-4 border-violet-500/20" />
+                <div className="absolute inset-0 rounded-full border-4 border-t-violet-400 border-r-transparent border-b-transparent border-l-transparent animate-spin-fast" />
+                <div className="absolute inset-0 flex items-center justify-center text-2xl">🌐</div>
+              </div>
+              <div>
+                <p className="text-base sm:text-lg font-black text-white transition-opacity duration-300">
+                  {searchMessage}
+                </p>
+                <p className="text-xs text-slate-400 mt-1 tabular-nums">
+                  Elapsed: {searchElapsed}s
+                </p>
+              </div>
+              <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-widest text-violet-300 font-bold">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                Online · {boardSize}×{boardSize}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Status bar */}
         <div className="text-center px-4 sm:px-6 pt-5 pb-4 border-b border-white/5">
           <div className="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-2">
             {boardSize}×{boardSize}
-            {gameMode === 'ai' && ` · AI ${getDifficultyLabel()}`}
             {' · '}{boardSize === 3 ? '3 in a row' : '4 in a row'}
           </div>
           <h2 className={`text-xl sm:text-2xl font-black text-white ${gameOver ? 'animate-bounce-in' : ''}`}>
-            {!gameStarted ? (
+            {matchmaking ? (
+              <span className="text-violet-300 animate-pulse">Searching for opponent…</span>
+            ) : !gameStarted ? (
               <span className="text-slate-300">Tap <span className="text-violet-400">Start Game</span> to begin</span>
-            ) : aiThinking ? (
-              <span className="text-violet-300 animate-pulse">🤖 Thinking…</span>
             ) : gameOver ? (
               winner === 'draw'
                 ? "It's a Draw! 🤝"
@@ -558,120 +647,130 @@ export function TicTacToe() {
         </div>
       </div>
 
-      {/* Player Stats */}
-      <div className="grid grid-cols-2 gap-3 sm:gap-4">
-        {/* Player 1 */}
-        <div
-          className={`rounded-xl p-3 sm:p-5 border transition-all duration-300 ${
-            gameOver && winner === 'X'
-              ? 'bg-sky-500/15 border-sky-500/50 ring-1 ring-sky-500/20 animate-bounce-in'
-              : gameOver && winner === 'O'
-              ? 'bg-slate-800/30 border-slate-700/40 opacity-50'
-              : !gameOver && currentPlayer === 'X'
-              ? 'bg-sky-500/10 border-sky-500/40'
-              : 'bg-slate-800/50 border-white/8'
-          }`}
-        >
-          <div className="flex items-center justify-between mb-3 gap-2">
-            <div className="min-w-0 flex-1">
-              {editingPlayer === player1.id ? (
-                <input
-                  autoFocus
-                  type="text"
-                  value={editName}
-                  onChange={(e) => setEditName(e.target.value)}
-                  onBlur={() => handleRename(player1.id)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') handleRename(player1.id);
-                  }}
-                  className="px-2 py-1 text-xs sm:text-sm rounded-lg bg-slate-700 text-white border border-sky-500/50 focus:outline-none focus:border-sky-400 w-full"
-                />
-              ) : (
-                <h3
-                  className="text-xs sm:text-base font-bold text-white cursor-pointer hover:text-sky-400 truncate transition-colors"
-                  onClick={() => { setEditingPlayer(player1.id); setEditName(player1.name); }}
-                  title="Click to rename"
-                >
-                  {player1.name}
-                </h3>
-              )}
+      {/* Player Stats — portaled to the right column. Opponent is only shown
+          when a match is actually running (gameStarted). */}
+      {statsSlot && createPortal(
+        <div className={`grid gap-3 sm:gap-4 ${gameStarted ? 'grid-cols-2' : 'grid-cols-1'}`}>
+          {/* Player 1 */}
+          <div
+            className={`rounded-xl p-3 sm:p-5 border transition-all duration-300 ${
+              gameOver && winner === 'X'
+                ? 'bg-sky-500/15 border-sky-500/50 ring-1 ring-sky-500/20 animate-bounce-in'
+                : gameOver && winner === 'O'
+                ? 'bg-slate-800/30 border-slate-700/40 opacity-50'
+                : !gameOver && currentPlayer === 'X'
+                ? 'bg-sky-500/10 border-sky-500/40'
+                : 'bg-slate-800/50 border-white/8'
+            }`}
+          >
+            <div className="flex items-center justify-between mb-3 gap-2">
+              <div className="min-w-0 flex-1">
+                {editingPlayer === player1.id ? (
+                  <input
+                    autoFocus
+                    type="text"
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    onBlur={() => handleRename(player1.id)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleRename(player1.id);
+                    }}
+                    className="px-2 py-1 text-xs sm:text-sm rounded-lg bg-slate-700 text-white border border-sky-500/50 focus:outline-none focus:border-sky-400 w-full"
+                  />
+                ) : (
+                  <h3
+                    className="text-xs sm:text-base font-bold text-white cursor-pointer hover:text-sky-400 truncate transition-colors"
+                    onClick={() => { setEditingPlayer(player1.id); setEditName(player1.name); }}
+                    title="Click to rename"
+                  >
+                    {player1.name}
+                  </h3>
+                )}
+              </div>
+              <span className="text-lg sm:text-2xl font-black text-sky-400 flex-shrink-0">X</span>
             </div>
-            <span className="text-lg sm:text-2xl font-black text-sky-400 flex-shrink-0">X</span>
+            <div className="grid grid-cols-3 gap-1 text-center">
+              <div className="rounded-lg bg-green-500/10 py-1.5">
+                <p className="text-xs sm:text-sm font-bold text-green-400">{player1.wins}</p>
+                <p className="text-xs text-slate-500">W</p>
+              </div>
+              <div className="rounded-lg bg-red-500/10 py-1.5">
+                <p className="text-xs sm:text-sm font-bold text-red-400">{player1.losses}</p>
+                <p className="text-xs text-slate-500">L</p>
+              </div>
+              <div className="rounded-lg bg-yellow-500/10 py-1.5">
+                <p className="text-xs sm:text-sm font-bold text-yellow-400">{player1.draws}</p>
+                <p className="text-xs text-slate-500">D</p>
+              </div>
+            </div>
           </div>
-          <div className="grid grid-cols-3 gap-1 text-center">
-            <div className="rounded-lg bg-green-500/10 py-1.5">
-              <p className="text-xs sm:text-sm font-bold text-green-400">{player1.wins}</p>
-              <p className="text-xs text-slate-500">W</p>
-            </div>
-            <div className="rounded-lg bg-red-500/10 py-1.5">
-              <p className="text-xs sm:text-sm font-bold text-red-400">{player1.losses}</p>
-              <p className="text-xs text-slate-500">L</p>
-            </div>
-            <div className="rounded-lg bg-yellow-500/10 py-1.5">
-              <p className="text-xs sm:text-sm font-bold text-yellow-400">{player1.draws}</p>
-              <p className="text-xs text-slate-500">D</p>
-            </div>
-          </div>
-        </div>
 
-        {/* Player 2 / Computer */}
-        <div
-          className={`rounded-xl p-3 sm:p-5 border transition-all duration-300 ${
-            gameOver && winner === 'O'
-              ? 'bg-rose-500/15 border-rose-500/50 ring-1 ring-rose-500/20 animate-bounce-in'
-              : gameOver && winner === 'X'
-              ? 'bg-slate-800/30 border-slate-700/40 opacity-50'
-              : !gameOver && currentPlayer === 'O'
-              ? 'bg-rose-500/10 border-rose-500/40'
-              : 'bg-slate-800/50 border-white/8'
-          }`}
-        >
-          <div className="flex items-center justify-between mb-3 gap-2">
-            <div className="min-w-0 flex-1">
-              {gameMode === 'ai' ? (
-                <h3 className="text-xs sm:text-base font-bold text-white truncate">
-                  🤖 {player2.name}
-                </h3>
-              ) : editingPlayer === player2.id ? (
-                <input
-                  autoFocus
-                  type="text"
-                  value={editName}
-                  onChange={(e) => setEditName(e.target.value)}
-                  onBlur={() => handleRename(player2.id)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') handleRename(player2.id);
-                  }}
-                  className="px-2 py-1 text-xs sm:text-sm rounded-lg bg-slate-700 text-white border border-rose-500/50 focus:outline-none focus:border-rose-400 w-full"
-                />
-              ) : (
-                <h3
-                  className="text-xs sm:text-base font-bold text-white cursor-pointer hover:text-rose-400 truncate transition-colors"
-                  onClick={() => { setEditingPlayer(player2.id); setEditName(player2.name); }}
-                  title="Click to rename"
-                >
-                  {player2.name}
-                </h3>
-              )}
+          {/* Player 2 — hidden until a match is actually running. */}
+          {gameStarted && (
+            <div
+              className={`rounded-xl p-3 sm:p-5 border transition-all duration-300 ${
+                gameOver && winner === 'O'
+                  ? 'bg-rose-500/15 border-rose-500/50 ring-1 ring-rose-500/20 animate-bounce-in'
+                  : gameOver && winner === 'X'
+                  ? 'bg-slate-800/30 border-slate-700/40 opacity-50'
+                  : !gameOver && currentPlayer === 'O'
+                  ? 'bg-rose-500/10 border-rose-500/40'
+                  : 'bg-slate-800/50 border-white/8'
+              }`}
+            >
+              <div className="flex items-center justify-between mb-3 gap-2">
+                <div className="min-w-0 flex-1">
+                  {gameMode === 'ai' ? (
+                    <h3 className="text-xs sm:text-base font-bold text-white truncate flex items-center gap-1.5">
+                      <span
+                        className="inline-block w-2 h-2 rounded-full bg-emerald-400 flex-shrink-0"
+                        title="Online"
+                      />
+                      <span className="truncate">{player2.name}</span>
+                    </h3>
+                  ) : editingPlayer === player2.id ? (
+                    <input
+                      autoFocus
+                      type="text"
+                      value={editName}
+                      onChange={(e) => setEditName(e.target.value)}
+                      onBlur={() => handleRename(player2.id)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleRename(player2.id);
+                      }}
+                      className="px-2 py-1 text-xs sm:text-sm rounded-lg bg-slate-700 text-white border border-rose-500/50 focus:outline-none focus:border-rose-400 w-full"
+                    />
+                  ) : (
+                    <h3
+                      className="text-xs sm:text-base font-bold text-white cursor-pointer hover:text-rose-400 truncate transition-colors"
+                      onClick={() => { setEditingPlayer(player2.id); setEditName(player2.name); }}
+                      title="Click to rename"
+                    >
+                      {player2.name}
+                    </h3>
+                  )}
+                </div>
+                <span className="text-lg sm:text-2xl font-black text-rose-400 flex-shrink-0">O</span>
+              </div>
+              <div className="grid grid-cols-3 gap-1 text-center">
+                <div className="rounded-lg bg-green-500/10 py-1.5">
+                  <p className="text-xs sm:text-sm font-bold text-green-400">{player2.wins}</p>
+                  <p className="text-xs text-slate-500">W</p>
+                </div>
+                <div className="rounded-lg bg-red-500/10 py-1.5">
+                  <p className="text-xs sm:text-sm font-bold text-red-400">{player2.losses}</p>
+                  <p className="text-xs text-slate-500">L</p>
+                </div>
+                <div className="rounded-lg bg-yellow-500/10 py-1.5">
+                  <p className="text-xs sm:text-sm font-bold text-yellow-400">{player2.draws}</p>
+                  <p className="text-xs text-slate-500">D</p>
+                </div>
+              </div>
             </div>
-            <span className="text-lg sm:text-2xl font-black text-rose-400 flex-shrink-0">O</span>
-          </div>
-          <div className="grid grid-cols-3 gap-1 text-center">
-            <div className="rounded-lg bg-green-500/10 py-1.5">
-              <p className="text-xs sm:text-sm font-bold text-green-400">{player2.wins}</p>
-              <p className="text-xs text-slate-500">W</p>
-            </div>
-            <div className="rounded-lg bg-red-500/10 py-1.5">
-              <p className="text-xs sm:text-sm font-bold text-red-400">{player2.losses}</p>
-              <p className="text-xs text-slate-500">L</p>
-            </div>
-            <div className="rounded-lg bg-yellow-500/10 py-1.5">
-              <p className="text-xs sm:text-sm font-bold text-yellow-400">{player2.draws}</p>
-              <p className="text-xs text-slate-500">D</p>
-            </div>
-          </div>
-        </div>
-      </div>
+          )}
+        </div>,
+        statsSlot,
+      )}
 
       {/* New Game confirmation */}
       {showResetConfirm && (
@@ -690,9 +789,13 @@ export function TicTacToe() {
               </h3>
               <p className="text-sm text-slate-400">
                 {!gameStarted
-                  ? `Ready to play ${gameMode === 'ai' ? 'against the computer' : 'a match'}?`
+                  ? gameMode === 'ai'
+                    ? "We'll find a random player for you to play against."
+                    : 'Ready to play a match?'
                   : gameOver
-                  ? 'Begin a fresh round on the same board.'
+                  ? gameMode === 'ai'
+                    ? "We'll match you with a new opponent."
+                    : 'Begin a fresh round on the same board.'
                   : 'Your current game progress will be lost.'}
               </p>
             </div>

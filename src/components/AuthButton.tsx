@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useAuth } from '../store/authStore';
 
 const GoogleIcon = () => (
@@ -26,6 +27,7 @@ export function AuthButton() {
   const { user, loading, isConfigured, signInWithGoogle, signOut } = useAuth();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showSignOutConfirm, setShowSignOutConfirm] = useState(false);
 
   if (!isConfigured) {
     return null; // No Firebase env vars — keep header clean.
@@ -50,6 +52,7 @@ export function AuthButton() {
   };
 
   const handleSignOut = async () => {
+    setShowSignOutConfirm(false);
     setBusy(true);
     try {
       await signOut();
@@ -79,32 +82,88 @@ export function AuthButton() {
   const initial = displayName.charAt(0).toUpperCase();
 
   return (
-    <div className="flex items-center gap-2">
-      <div className="flex items-center gap-2 px-2 sm:px-3 py-1.5 rounded-xl bg-white/5 border border-white/10">
-        {user.photoURL ? (
-          <img
-            src={user.photoURL}
-            alt=""
-            className="w-6 h-6 rounded-full"
-            referrerPolicy="no-referrer"
-          />
-        ) : (
-          <div className="w-6 h-6 rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-500 flex items-center justify-center text-white text-xs font-bold">
-            {initial}
-          </div>
-        )}
-        <span className="text-xs sm:text-sm font-semibold text-white max-w-[100px] sm:max-w-[160px] truncate">
-          {displayName}
-        </span>
+    <>
+      <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 px-2 sm:px-3 py-1.5 rounded-xl bg-white/5 border border-white/10">
+          {user.photoURL ? (
+            <img
+              src={user.photoURL}
+              alt=""
+              className="w-6 h-6 rounded-full"
+              referrerPolicy="no-referrer"
+            />
+          ) : (
+            <div className="w-6 h-6 rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-500 flex items-center justify-center text-white text-xs font-bold">
+              {initial}
+            </div>
+          )}
+          <span className="text-xs sm:text-sm font-semibold text-white max-w-[100px] sm:max-w-[160px] truncate">
+            {displayName}
+          </span>
+        </div>
+        <button
+          onClick={() => setShowSignOutConfirm(true)}
+          disabled={busy}
+          className="text-xs text-slate-400 hover:text-white px-2 py-1 rounded-lg hover:bg-white/5 transition-colors disabled:opacity-60"
+          title="Sign out"
+        >
+          Sign out
+        </button>
       </div>
-      <button
-        onClick={handleSignOut}
-        disabled={busy}
-        className="text-xs text-slate-400 hover:text-white px-2 py-1 rounded-lg hover:bg-white/5 transition-colors disabled:opacity-60"
-        title="Sign out"
-      >
-        Sign out
-      </button>
-    </div>
+
+      {showSignOutConfirm && createPortal(
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+          onClick={() => setShowSignOutConfirm(false)}
+        >
+          <div
+            className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl border border-violet-500/40 shadow-2xl max-w-sm w-full p-6 animate-bounce-in"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="text-center mb-5">
+              <div className="flex justify-center mb-3">
+                {user.photoURL ? (
+                  <img
+                    src={user.photoURL}
+                    alt=""
+                    referrerPolicy="no-referrer"
+                    className="w-14 h-14 rounded-full border-2 border-white/10"
+                  />
+                ) : (
+                  <div className="w-14 h-14 rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-500 flex items-center justify-center text-white text-xl font-black">
+                    {initial}
+                  </div>
+                )}
+              </div>
+              <h3 className="text-lg sm:text-xl font-black text-white mb-1.5">
+                Sign out?
+              </h3>
+              <p className="text-sm text-slate-400">
+                You'll be signed out as{' '}
+                <span className="font-semibold text-white">{displayName}</span>. Your
+                stats stay safe in the cloud and will reappear when you sign back in.
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowSignOutConfirm(false)}
+                disabled={busy}
+                className="flex-1 px-4 py-2.5 rounded-xl bg-white/8 border border-white/10 text-slate-300 hover:text-white hover:bg-white/12 transition-all duration-200 font-semibold text-sm disabled:opacity-60"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSignOut}
+                disabled={busy}
+                className="flex-1 px-4 py-2.5 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white font-semibold text-sm shadow-lg shadow-rose-500/30 transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                {busy ? 'Signing out…' : 'Sign out'}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body,
+      )}
+    </>
   );
 }

@@ -1,6 +1,7 @@
 import { TicTacToe } from './components/TicTacToe';
 import { UserRanking } from './components/UserRanking';
 import { AuthButton } from './components/AuthButton';
+import { SignInBanner } from './components/SignInBanner';
 
 export default function App() {
   return (
@@ -23,15 +24,18 @@ export default function App() {
       </header>
 
       {/* Main Content */}
-      <main className="mx-auto max-w-7xl px-4 py-6 sm:py-8 sm:px-6 lg:px-8">
+      <main className="mx-auto max-w-7xl px-4 py-6 sm:py-8 sm:px-6 lg:px-8 space-y-6">
+        <SignInBanner />
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
           {/* Game Board */}
           <div className="lg:col-span-2">
             <TicTacToe />
           </div>
 
-          {/* Leaderboard */}
-          <div>
+          {/* Right column: player stats above leaderboard */}
+          <div className="space-y-6">
+            {/* Portal target — TicTacToe portals its player stats here. */}
+            <div id="player-stats-slot" />
             <UserRanking />
           </div>
         </div>

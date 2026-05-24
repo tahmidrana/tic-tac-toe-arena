@@ -74,7 +74,7 @@ export function SettingsModal({
             {gameMode === 'ai' && (
               <div>
                 <h3 className="text-sm font-bold text-white mb-3 uppercase tracking-wider">
-                  🤖 AI Difficulty
+                  🎯 Opponent Skill
                 </h3>
                 <DifficultySelector
                   difficulty={difficulty}
