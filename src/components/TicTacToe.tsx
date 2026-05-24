@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useGameStore } from '../store/gameStore';
 import { Confetti } from './Confetti';
 import { WinAnimation } from './WinAnimation';
@@ -24,17 +24,6 @@ export function TicTacToe() {
   const [showSettings, setShowSettings] = useState(false);
   const [showWinNotice, setShowWinNotice] = useState(true);
   const [showLossNotice, setShowLossNotice] = useState(true);
-  const [windowSize, setWindowSize] = useState(window.innerWidth);
-
-  // Handle window resize for responsive board
-  useEffect(() => {
-    const handleResize = () => {
-      setWindowSize(window.innerWidth);
-    };
-
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
 
   const player1 = users[0] || { id: '1', name: 'Player 1', wins: 0, losses: 0, draws: 0 };
   const player2 = users[1] || { id: '2', name: 'Computer', wins: 0, losses: 0, draws: 0 };
@@ -266,20 +255,32 @@ export function TicTacToe() {
   const winnerPlayer = winner === 'X' ? player1 : winner === 'O' ? player2 : null;
   const boardClickHandler = gameMode === 'ai' ? handleClick : handleClickPvP;
 
-  // Get screen width
-  const screenWidth = window.innerWidth;
+  // Track viewport width so the board re-fits on resize / orientation change
+  const [screenWidth, setScreenWidth] = useState(() =>
+    typeof window !== 'undefined' ? window.innerWidth : 1024
+  );
+
+  useEffect(() => {
+    const handleResize = () => setScreenWidth(window.innerWidth);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // Calculate responsive board dimensions - Full width on mobile without overflow
   const getSquareSize = () => {
     const gap = screenWidth < 640 ? 2 : screenWidth < 1024 ? 5 : 6;
-    const padding = screenWidth < 480 ? 4 : screenWidth < 640 ? 4 : 16;
-    
+    const padding = screenWidth < 640 ? 8 : 16;
+
     // Mobile: make board fit exactly within viewport
     if (screenWidth < 640) {
-      // Use full screen width, account for gaps and padding
+      // Horizontal chrome around the grid on mobile:
+      //   header `p-3`  = 12px * 2 = 24
+      //   board wrapper `px-1` = 4px * 2 = 8
+      // Plus a 2px safety buffer to avoid sub-pixel overflow.
+      const parentChrome = 24 + 8 + 2;
       const totalGapWidth = (boardSize - 1) * gap;
       const totalPaddingWidth = padding * 2;
-      const availableWidth = screenWidth - totalPaddingWidth - totalGapWidth;
+      const availableWidth = screenWidth - parentChrome - totalPaddingWidth - totalGapWidth;
       const size = Math.floor(availableWidth / boardSize);
       return Math.max(size, 20); // Minimum 20px per square
     }
@@ -294,7 +295,7 @@ export function TicTacToe() {
   };
 
   const gap = screenWidth < 640 ? 2 : screenWidth < 1024 ? 5 : 6;
-  const padding = screenWidth < 480 ? 4 : screenWidth < 640 ? 4 : 16;
+  const padding = screenWidth < 640 ? 8 : 16;
   const squareSize = getSquareSize();
 
   const getDifficultyLabel = () => {
@@ -429,10 +430,50 @@ export function TicTacToe() {
         </div>
 
         {/* Game Board */}
-        <div className="mb-2 sm:mb-8 w-full flex justify-center overflow-hidden">
-
-
-        {/* Game Controls */}
+        <div className="mb-2 sm:mb-8 w-full flex justify-center overflow-hidden px-1">
+          <div
+            className="bg-slate-900/50 rounded-lg border-0 sm:border border-purple-500/20"
+            style={{
+              display: 'grid',
+              gridTemplateColumns: `repeat(${boardSize}, ${squareSize}px)`,
+              gap: `${gap}px`,
+              padding: `${padding}px`,
+              boxSizing: 'content-box',
+            }}
+          >
+            {board.map((value, index) => {
+              const isWinningSquare = winningLine?.includes(index);
+              return (
+                <button
+                  key={index}
+                  onClick={() => boardClickHandler(index)}
+                  disabled={gameOver || value !== null || aiThinking}
+                  style={{
+                    boxSizing: 'border-box',
+                    width: `${squareSize}px`,
+                    height: `${squareSize}px`,
+                    fontSize: `${squareSize * 0.5}px`,
+                  }}
+                  className={`rounded-xl font-black transition-all duration-200 border-4 flex items-center justify-center shadow-lg
+                    ${
+                      value === 'X'
+                        ? 'bg-blue-500/30 text-blue-300 border-blue-400 animate-bounce-in shadow-blue-500/50'
+                        : value === 'O'
+                        ? 'bg-red-500/30 text-red-300 border-red-400 animate-bounce-in shadow-red-500/50'
+                        : 'bg-slate-700/50 border-slate-500 hover:bg-slate-600/50 hover:border-purple-400 hover:shadow-purple-500/50 cursor-pointer'
+                    }
+                    ${isWinningSquare ? 'ring-4 ring-yellow-400 bg-yellow-500/30 shadow-yellow-500/50' : ''}
+                    disabled:cursor-not-allowed hover:scale-105
+                  `}
+                >
+                  <span className={isWinningSquare && gameOver ? 'line-through text-yellow-200 font-black drop-shadow-lg' : ''}>
+                    {value}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
         <div className="flex justify-center mt-2 sm:mt-4">
           <button
             onClick={resetGame}
