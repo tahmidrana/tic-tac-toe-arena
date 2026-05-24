@@ -10,7 +10,7 @@ export function SettingsModal({
   gameMode,
   difficulty,
   onDifficultyChange,
-  gameOver,
+  locked,
 }: {
   isOpen: boolean;
   onClose: () => void;
@@ -19,7 +19,7 @@ export function SettingsModal({
   gameMode: 'pvp' | 'ai';
   difficulty: Difficulty;
   onDifficultyChange: (difficulty: Difficulty) => void;
-  gameOver: boolean;
+  locked: boolean;
 }) {
   if (!isOpen) return null;
 
@@ -66,7 +66,7 @@ export function SettingsModal({
               <BoardSizeSelector
                 boardSize={boardSize}
                 onBoardSizeChange={handleBoardSizeChange}
-                disabled={gameOver}
+                disabled={locked}
               />
             </div>
 
@@ -79,17 +79,17 @@ export function SettingsModal({
                 <DifficultySelector
                   difficulty={difficulty}
                   onDifficultyChange={handleDifficultyChange}
-                  disabled={gameOver}
+                  disabled={locked}
                 />
               </div>
             )}
 
             {/* Info Text */}
             <div className="text-xs text-slate-400 text-center pt-4 border-t border-slate-700">
-              {gameOver ? (
-                <p>✅ Settings available - Finish your game to make changes</p>
-              ) : (
+              {locked ? (
                 <p>⚠️ Settings locked during active gameplay</p>
+              ) : (
+                <p>✅ Settings available — changes apply to your next game</p>
               )}
             </div>
           </div>

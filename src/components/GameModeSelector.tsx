@@ -6,30 +6,31 @@ export function GameModeSelector({
   onModeChange: (mode: 'pvp' | 'ai') => void;
 }) {
   return (
-    <div className="rounded-xl bg-gradient-to-r from-purple-900/50 to-pink-900/50 p-6 backdrop-blur-sm border border-purple-500/30">
-      <h3 className="text-lg font-bold text-white mb-4">Game Mode</h3>
-      <div className="grid grid-cols-2 gap-3">
-        <button
-          onClick={() => onModeChange('pvp')}
-          className={`px-6 py-3 rounded-lg font-semibold transition-all duration-200 ${
-            selectedMode === 'pvp'
-              ? 'bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-lg ring-2 ring-blue-400'
-              : 'bg-slate-700/50 text-slate-300 hover:bg-slate-600/50 hover:text-white border border-slate-600'
-          }`}
-        >
-          👥 Player vs Player
-        </button>
-        <button
-          onClick={() => onModeChange('ai')}
-          className={`px-6 py-3 rounded-lg font-semibold transition-all duration-200 ${
-            selectedMode === 'ai'
-              ? 'bg-gradient-to-r from-purple-600 to-purple-500 text-white shadow-lg ring-2 ring-purple-400'
-              : 'bg-slate-700/50 text-slate-300 hover:bg-slate-600/50 hover:text-white border border-slate-600'
-          }`}
-        >
-          🤖 vs Computer
-        </button>
-      </div>
+    <div className="flex bg-slate-800/80 rounded-xl p-1 border border-white/10 shadow-inner gap-1">
+      <button
+        onClick={() => onModeChange('pvp')}
+        className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold transition-all duration-200 ${
+          selectedMode === 'pvp'
+            ? 'bg-gradient-to-r from-sky-600 to-blue-600 text-white shadow-md shadow-sky-500/20'
+            : 'text-slate-400 hover:text-white hover:bg-white/5'
+        }`}
+      >
+        <span>👥</span>
+        <span className="hidden sm:inline">Player vs Player</span>
+        <span className="sm:hidden">PvP</span>
+      </button>
+      <button
+        onClick={() => onModeChange('ai')}
+        className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold transition-all duration-200 ${
+          selectedMode === 'ai'
+            ? 'bg-gradient-to-r from-violet-600 to-purple-600 text-white shadow-md shadow-violet-500/20'
+            : 'text-slate-400 hover:text-white hover:bg-white/5'
+        }`}
+      >
+        <span>🤖</span>
+        <span className="hidden sm:inline">vs Computer</span>
+        <span className="sm:hidden">AI</span>
+      </button>
     </div>
   );
 }

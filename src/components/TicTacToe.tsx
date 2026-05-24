@@ -24,6 +24,11 @@ export function TicTacToe() {
   const [showSettings, setShowSettings] = useState(false);
   const [showWinNotice, setShowWinNotice] = useState(true);
   const [showLossNotice, setShowLossNotice] = useState(true);
+  const TURN_SECONDS = 15;
+  const [timeLeft, setTimeLeft] = useState(TURN_SECONDS);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
+  // Game is idle (board disabled) until the user explicitly starts a game.
+  const [gameStarted, setGameStarted] = useState(false);
 
   const player1 = users[0] || { id: '1', name: 'Player 1', wins: 0, losses: 0, draws: 0 };
   const player2 = users[1] || { id: '2', name: 'Computer', wins: 0, losses: 0, draws: 0 };
@@ -142,7 +147,7 @@ export function TicTacToe() {
   };
 
   const handleClick = (index: number) => {
-    if (gameOver || board[index] !== null || aiThinking) return;
+    if (!gameStarted || gameOver || board[index] !== null || aiThinking) return;
 
     const newBoard = [...board];
     newBoard[index] = 'X'; // Player is always X
@@ -179,7 +184,7 @@ export function TicTacToe() {
   const handleClickPvP = (index: number) => {
     if (gameMode === 'ai') return; // Use AI handler instead
 
-    if (gameOver || board[index] !== null) return;
+    if (!gameStarted || gameOver || board[index] !== null) return;
 
     const newBoard = [...board];
     newBoard[index] = isXNext ? 'X' : 'O';
@@ -211,6 +216,17 @@ export function TicTacToe() {
     setIsXNext(!isXNext);
   };
 
+  const requestReset = () => {
+    // Always confirm before (re)starting a game.
+    setShowResetConfirm(true);
+  };
+
+  const confirmReset = () => {
+    setShowResetConfirm(false);
+    resetGame();
+    setGameStarted(true);
+  };
+
   const resetGame = () => {
     setBoard(Array(boardSize * boardSize).fill(null));
     setIsXNext(true);
@@ -225,6 +241,7 @@ export function TicTacToe() {
   const handleGameModeChange = (mode: 'pvp' | 'ai') => {
     setGameMode(mode);
     resetGame();
+    setGameStarted(false); // mode change should NOT auto-start a game
     // Update player 2 name based on mode
     if (mode === 'ai') {
       users[1] = { ...users[1], name: 'Computer' };
@@ -240,6 +257,7 @@ export function TicTacToe() {
     setGameOver(false);
     setWinner(null);
     setWinningLine(null);
+    setGameStarted(false); // board size change should NOT auto-start a game
   };
 
   const handleRename = (playerId: string) => {
@@ -266,6 +284,43 @@ export function TicTacToe() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  // Reset the turn timer whenever the active turn changes
+  // (board change = a move was just made; mode/end-of-game also resets).
+  useEffect(() => {
+    setTimeLeft(TURN_SECONDS);
+  }, [board, gameMode, gameOver]);
+
+  // Timer applies only to human turns: PvP both players, AI mode only when X (human) moves.
+  const timerActive =
+    gameStarted &&
+    !gameOver &&
+    !aiThinking &&
+    !showSettings &&
+    (gameMode === 'pvp' || isXNext);
+
+  // Countdown + auto-play random on timeout.
+  useEffect(() => {
+    if (!timerActive) return;
+
+    if (timeLeft <= 0) {
+      const empties: number[] = [];
+      for (let i = 0; i < board.length; i++) {
+        if (board[i] === null) empties.push(i);
+      }
+      if (empties.length === 0) return;
+      const randomIdx = empties[Math.floor(Math.random() * empties.length)];
+      if (gameMode === 'ai') handleClick(randomIdx);
+      else handleClickPvP(randomIdx);
+      return;
+    }
+
+    const id = setTimeout(() => setTimeLeft((t) => t - 1), 1000);
+    return () => clearTimeout(id);
+    // handleClick / handleClickPvP are intentionally omitted — their closure
+    // is fresh on each render and they aren't called until timeLeft hits 0.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [timeLeft, timerActive]);
+
   // Calculate responsive board dimensions - Full width on mobile without overflow
   const getSquareSize = () => {
     const gap = screenWidth < 640 ? 2 : screenWidth < 1024 ? 5 : 6;
@@ -274,10 +329,10 @@ export function TicTacToe() {
     // Mobile: make board fit exactly within viewport
     if (screenWidth < 640) {
       // Horizontal chrome around the grid on mobile:
-      //   header `p-3`  = 12px * 2 = 24
-      //   board wrapper `px-1` = 4px * 2 = 8
-      // Plus a 2px safety buffer to avoid sub-pixel overflow.
-      const parentChrome = 24 + 8 + 2;
+      //   <main> px-4       = 16px * 2 = 32
+      //   board wrapper px-3 = 12px * 2 = 24
+      // Plus a 4px safety buffer.
+      const parentChrome = 32 + 24 + 4;
       const totalGapWidth = (boardSize - 1) * gap;
       const totalPaddingWidth = padding * 2;
       const availableWidth = screenWidth - parentChrome - totalPaddingWidth - totalGapWidth;
@@ -304,7 +359,7 @@ export function TicTacToe() {
   };
 
   return (
-    <div className="space-y-2 sm:space-y-6 min-h-screen">
+    <div className="space-y-3 sm:space-y-4">
       {/* Animations */}
       <Confetti trigger={gameOver && winner !== 'draw' && winner !== null} />
       {/* Win/Draw Animations - PvP: show winner, PvAI: show player result/draw */}
@@ -351,17 +406,18 @@ export function TicTacToe() {
         <Confetti trigger={gameOver && winner !== null} />
       )}
 
-      {/* Game Mode Selector */}
-      <GameModeSelector selectedMode={gameMode} onModeChange={handleGameModeChange} />
-
-      {/* Game Settings Button */}
-      <div className="flex justify-center px-2">
+      {/* Toolbar: mode toggle + settings */}
+      <div className="flex items-center gap-2 sm:gap-3">
+        <div className="flex-1 min-w-0">
+          <GameModeSelector selectedMode={gameMode} onModeChange={handleGameModeChange} />
+        </div>
         <button
           onClick={() => setShowSettings(true)}
-          className="px-4 sm:px-6 py-2 sm:py-3 rounded-lg bg-gradient-to-r from-cyan-600 to-cyan-500 text-white text-sm sm:text-base font-semibold hover:from-cyan-500 hover:to-cyan-400 transition-all duration-200 shadow-lg hover:scale-105 flex items-center gap-2"
+          className="flex-shrink-0 h-10 w-10 sm:h-auto sm:w-auto sm:px-4 sm:py-2.5 rounded-xl bg-slate-800/80 border border-white/10 text-slate-400 hover:text-white hover:border-violet-500/50 hover:bg-slate-700/80 transition-all duration-200 flex items-center justify-center gap-2 text-sm font-medium"
+          title="Settings"
         >
           <span>⚙️</span>
-          <span>Settings</span>
+          <span className="hidden sm:inline">Settings</span>
         </button>
       </div>
 
@@ -374,65 +430,78 @@ export function TicTacToe() {
         gameMode={gameMode}
         difficulty={difficulty}
         onDifficultyChange={setDifficulty}
-        gameOver={gameOver}
+        locked={gameStarted && !gameOver}
       />
 
-      {/* Game Header */}
+      {/* Game Card */}
       <div
-        className={`rounded-none sm:rounded-xl bg-gradient-to-r from-purple-900/50 to-pink-900/50 p-3 sm:p-6 sm:mx-auto sm:max-w-4xl sm:rounded-xl backdrop-blur-sm border-0 sm:border border-purple-500/30 transition-all duration-300 -mx-4 sm:mx-auto ${
-          gameOver && winner !== 'draw' && winner !== null ? 'animate-pulse-board' : ''
+        className={`rounded-2xl border backdrop-blur-md shadow-xl overflow-hidden transition-all duration-300 ${
+          gameOver && winner !== 'draw' && winner !== null
+            ? 'bg-slate-900/80 border-yellow-500/30 shadow-yellow-500/10 animate-pulse-board'
+            : 'bg-slate-900/70 border-white/8'
         }`}
       >
-        <div className="text-center mb-2 sm:mb-4 px-1 sm:px-2">
-          <h2
-            className={`text-lg sm:text-2xl font-bold text-white mb-1 sm:mb-2 ${gameOver ? 'animate-bounce-in' : ''}`}
-          >
-            {aiThinking ? (
-              <span className="animate-pulse">🤖 Computer is thinking...</span>
+        {/* Status bar */}
+        <div className="text-center px-4 sm:px-6 pt-5 pb-4 border-b border-white/5">
+          <div className="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-2">
+            {boardSize}×{boardSize}
+            {gameMode === 'ai' && ` · AI ${getDifficultyLabel()}`}
+            {' · '}{boardSize === 3 ? '3 in a row' : '4 in a row'}
+          </div>
+          <h2 className={`text-xl sm:text-2xl font-black text-white ${gameOver ? 'animate-bounce-in' : ''}`}>
+            {!gameStarted ? (
+              <span className="text-slate-300">Tap <span className="text-violet-400">Start Game</span> to begin</span>
+            ) : aiThinking ? (
+              <span className="text-violet-300 animate-pulse">🤖 Thinking…</span>
             ) : gameOver ? (
-              winner === 'draw' ? (
-                "It's a Draw! 🤝"
-              ) : (
-                `${winner === 'X' ? player1.name : player2.name} Wins! 🎉`
-              )
+              winner === 'draw'
+                ? "It's a Draw! 🤝"
+                : `${winner === 'X' ? player1.name : player2.name} Wins! 🎉`
             ) : (
-              `${currentPlayerObj.name}'s Turn`
+              <span>
+                <span className={currentPlayer === 'X' ? 'text-sky-400' : 'text-rose-400'}>
+                  {currentPlayerObj.name}
+                </span>
+                <span className="text-slate-400 font-semibold">'s turn</span>
+              </span>
             )}
           </h2>
-          
-          {/* Difficulty and Board Info */}
-          <div className="flex justify-center items-center gap-1 sm:gap-4 text-xs sm:text-sm text-slate-300 mb-1 sm:mb-2 flex-wrap">
-            <span>📋 {boardSize}x{boardSize}</span>
-            {gameMode === 'ai' && <span>🤖 {getDifficultyLabel()}</span>}
-          </div>
 
-          {/* Win Condition Instruction */}
-          <div className="text-center text-xs sm:text-sm text-yellow-300 mb-2 sm:mb-3 px-2">
-            {boardSize === 3 ? (
-              <span>✓ Get 3 in a row to win</span>
-            ) : (
-              <span>✓ Get 4 in a row to win</span>
-            )}
-          </div>
-
-          {!gameOver && !aiThinking && (
-            <div className="flex justify-center items-center gap-2 px-2 flex-wrap">
-              <span className="text-sm sm:text-lg font-semibold text-white">Current:</span>
-              <span
-                className={`text-2xl sm:text-3xl font-bold ${
-                  currentPlayer === 'X' ? 'text-blue-400' : 'text-red-400'
-                }`}
-              >
-                {currentPlayer}
-              </span>
+          {/* Turn timer */}
+          {timerActive && (
+            <div className="mt-3 max-w-[200px] mx-auto">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[10px] uppercase tracking-widest text-slate-500 font-semibold">
+                  Time
+                </span>
+                <span
+                  className={`text-xs font-bold tabular-nums ${
+                    timeLeft <= 5 ? 'text-red-400 animate-pulse' : 'text-slate-300'
+                  }`}
+                >
+                  {timeLeft}s
+                </span>
+              </div>
+              <div className="w-full bg-white/10 rounded-full h-1.5 overflow-hidden">
+                <div
+                  className={`h-1.5 rounded-full transition-all duration-1000 ease-linear ${
+                    timeLeft <= 5
+                      ? 'bg-gradient-to-r from-red-500 to-rose-500'
+                      : timeLeft <= 10
+                      ? 'bg-gradient-to-r from-yellow-400 to-amber-400'
+                      : 'bg-gradient-to-r from-emerald-500 to-teal-400'
+                  }`}
+                  style={{ width: `${(timeLeft / TURN_SECONDS) * 100}%` }}
+                />
+              </div>
             </div>
           )}
         </div>
 
         {/* Game Board */}
-        <div className="mb-2 sm:mb-8 w-full flex justify-center overflow-hidden px-1">
+        <div className="py-5 sm:py-6 w-full flex justify-center overflow-hidden px-3 sm:px-4">
           <div
-            className="bg-slate-900/50 rounded-lg border-0 sm:border border-purple-500/20"
+            className="bg-black/30 rounded-xl border border-white/5"
             style={{
               display: 'grid',
               gridTemplateColumns: `repeat(${boardSize}, ${squareSize}px)`,
@@ -447,26 +516,26 @@ export function TicTacToe() {
                 <button
                   key={index}
                   onClick={() => boardClickHandler(index)}
-                  disabled={gameOver || value !== null || aiThinking}
+                  disabled={!gameStarted || gameOver || value !== null || aiThinking}
                   style={{
                     boxSizing: 'border-box',
                     width: `${squareSize}px`,
                     height: `${squareSize}px`,
                     fontSize: `${squareSize * 0.5}px`,
                   }}
-                  className={`rounded-xl font-black transition-all duration-200 border-4 flex items-center justify-center shadow-lg
+                  className={`rounded-2xl font-black transition-all duration-150 flex items-center justify-center
                     ${
                       value === 'X'
-                        ? 'bg-blue-500/30 text-blue-300 border-blue-400 animate-bounce-in shadow-blue-500/50'
+                        ? 'bg-sky-500/20 text-sky-300 border-2 border-sky-500/50 animate-bounce-in shadow-lg shadow-sky-500/20'
                         : value === 'O'
-                        ? 'bg-red-500/30 text-red-300 border-red-400 animate-bounce-in shadow-red-500/50'
-                        : 'bg-slate-700/50 border-slate-500 hover:bg-slate-600/50 hover:border-purple-400 hover:shadow-purple-500/50 cursor-pointer'
+                        ? 'bg-rose-500/20 text-rose-300 border-2 border-rose-500/50 animate-bounce-in shadow-lg shadow-rose-500/20'
+                        : 'bg-white/4 border-2 border-white/10 hover:bg-violet-500/10 hover:border-violet-400/50 hover:shadow-md hover:shadow-violet-500/20 cursor-pointer'
                     }
-                    ${isWinningSquare ? 'ring-4 ring-yellow-400 bg-yellow-500/30 shadow-yellow-500/50' : ''}
-                    disabled:cursor-not-allowed hover:scale-105
+                    ${isWinningSquare ? 'ring-2 ring-yellow-400 bg-yellow-500/25 border-yellow-400/60 shadow-lg shadow-yellow-500/30' : ''}
+                    disabled:cursor-not-allowed active:scale-95 hover:scale-105
                   `}
                 >
-                  <span className={isWinningSquare && gameOver ? 'line-through text-yellow-200 font-black drop-shadow-lg' : ''}>
+                  <span className={isWinningSquare && gameOver ? 'text-yellow-200 drop-shadow-lg' : ''}>
                     {value}
                   </span>
                 </button>
@@ -474,34 +543,37 @@ export function TicTacToe() {
             })}
           </div>
         </div>
-        <div className="flex justify-center mt-2 sm:mt-4">
+
+        <div className="flex justify-center pb-5 sm:pb-6">
           <button
-            onClick={resetGame}
-            className={`px-4 sm:px-8 py-2 sm:py-3 rounded-lg bg-gradient-to-r from-purple-600 to-pink-600 text-white text-xs sm:text-base font-semibold hover:from-purple-500 hover:to-pink-500 transition-all duration-200 shadow-lg ${
-              gameOver ? 'animate-bounce-in' : 'hover:scale-105'
+            onClick={requestReset}
+            className={`px-7 sm:px-10 py-2.5 sm:py-3 rounded-xl font-bold text-sm sm:text-base transition-all duration-200 ${
+              !gameStarted || gameOver
+                ? 'bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 text-white shadow-lg shadow-violet-500/30 animate-bounce-in'
+                : 'bg-white/6 border border-white/10 text-slate-400 hover:text-white hover:bg-white/10 hover:scale-105'
             }`}
           >
-            {gameOver ? 'Play Again' : 'Reset'}
+            {!gameStarted ? '🎮 Start Game' : gameOver ? '🎮 Play Again' : 'New Game'}
           </button>
         </div>
       </div>
 
       {/* Player Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 px-1 sm:gap-4 sm:px-2">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4">
         {/* Player 1 */}
         <div
-          className={`rounded-lg p-3 sm:p-5 backdrop-blur-sm border-2 transition-all ${
+          className={`rounded-xl p-3 sm:p-5 border transition-all duration-300 ${
             gameOver && winner === 'X'
-              ? 'bg-green-500/30 border-green-500 ring-2 ring-green-500/50 animate-bounce-in'
-              : gameOver && winner !== null && winner !== 'draw' && winner === 'O'
-              ? 'bg-red-500/20 border-red-500 animate-shake'
+              ? 'bg-sky-500/15 border-sky-500/50 ring-1 ring-sky-500/20 animate-bounce-in'
+              : gameOver && winner === 'O'
+              ? 'bg-slate-800/30 border-slate-700/40 opacity-50'
               : !gameOver && currentPlayer === 'X'
-              ? 'bg-blue-500/20 border-blue-500 ring-2 ring-blue-500/50'
-              : 'bg-slate-800/50 border-slate-600'
+              ? 'bg-sky-500/10 border-sky-500/40'
+              : 'bg-slate-800/50 border-white/8'
           }`}
         >
           <div className="flex items-center justify-between mb-3 gap-2">
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               {editingPlayer === player1.id ? (
                 <input
                   autoFocus
@@ -509,63 +581,55 @@ export function TicTacToe() {
                   value={editName}
                   onChange={(e) => setEditName(e.target.value)}
                   onBlur={() => handleRename(player1.id)}
-                  onKeyPress={(e) => {
+                  onKeyDown={(e) => {
                     if (e.key === 'Enter') handleRename(player1.id);
                   }}
-                  className="px-2 py-1 text-sm rounded bg-slate-700 text-white border border-slate-500 focus:outline-none focus:border-blue-500 w-full"
+                  className="px-2 py-1 text-xs sm:text-sm rounded-lg bg-slate-700 text-white border border-sky-500/50 focus:outline-none focus:border-sky-400 w-full"
                 />
               ) : (
                 <h3
-                  className="text-sm sm:text-lg font-bold text-white cursor-pointer hover:text-blue-400 truncate"
-                  onClick={() => {
-                    setEditingPlayer(player1.id);
-                    setEditName(player1.name);
-                  }}
+                  className="text-xs sm:text-base font-bold text-white cursor-pointer hover:text-sky-400 truncate transition-colors"
+                  onClick={() => { setEditingPlayer(player1.id); setEditName(player1.name); }}
+                  title="Click to rename"
                 >
                   {player1.name}
                 </h3>
               )}
             </div>
-            <span className="text-xl sm:text-2xl font-bold text-blue-400 flex-shrink-0">X</span>
+            <span className="text-lg sm:text-2xl font-black text-sky-400 flex-shrink-0">X</span>
           </div>
-          <div className="space-y-2 text-xs sm:text-sm">
-            <div className="flex justify-between">
-              <span className="text-slate-300">Wins:</span>
-              <span className="font-semibold text-green-400">{player1.wins}</span>
+          <div className="grid grid-cols-3 gap-1 text-center">
+            <div className="rounded-lg bg-green-500/10 py-1.5">
+              <p className="text-xs sm:text-sm font-bold text-green-400">{player1.wins}</p>
+              <p className="text-xs text-slate-500">W</p>
             </div>
-            <div className="flex justify-between">
-              <span className="text-slate-300">Losses:</span>
-              <span className="font-semibold text-red-400">{player1.losses}</span>
+            <div className="rounded-lg bg-red-500/10 py-1.5">
+              <p className="text-xs sm:text-sm font-bold text-red-400">{player1.losses}</p>
+              <p className="text-xs text-slate-500">L</p>
             </div>
-            <div className="flex justify-between">
-              <span className="text-slate-300">Draws:</span>
-              <span className="font-semibold text-yellow-400">{player1.draws}</span>
-            </div>
-            <div className="flex justify-between pt-2 border-t border-slate-600">
-              <span className="text-slate-300">Total:</span>
-              <span className="font-semibold text-white">
-                {player1.wins + player1.losses + player1.draws}
-              </span>
+            <div className="rounded-lg bg-yellow-500/10 py-1.5">
+              <p className="text-xs sm:text-sm font-bold text-yellow-400">{player1.draws}</p>
+              <p className="text-xs text-slate-500">D</p>
             </div>
           </div>
         </div>
 
         {/* Player 2 / Computer */}
         <div
-          className={`rounded-lg p-3 sm:p-5 backdrop-blur-sm border-2 transition-all ${
+          className={`rounded-xl p-3 sm:p-5 border transition-all duration-300 ${
             gameOver && winner === 'O'
-              ? 'bg-green-500/30 border-green-500 ring-2 ring-green-500/50 animate-bounce-in'
-              : gameOver && winner !== null && winner !== 'draw' && winner === 'X'
-              ? 'bg-red-500/20 border-red-500 animate-shake'
+              ? 'bg-rose-500/15 border-rose-500/50 ring-1 ring-rose-500/20 animate-bounce-in'
+              : gameOver && winner === 'X'
+              ? 'bg-slate-800/30 border-slate-700/40 opacity-50'
               : !gameOver && currentPlayer === 'O'
-              ? 'bg-red-500/20 border-red-500 ring-2 ring-red-500/50'
-              : 'bg-slate-800/50 border-slate-600'
+              ? 'bg-rose-500/10 border-rose-500/40'
+              : 'bg-slate-800/50 border-white/8'
           }`}
         >
           <div className="flex items-center justify-between mb-3 gap-2">
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               {gameMode === 'ai' ? (
-                <h3 className="text-sm sm:text-lg font-bold text-white truncate">
+                <h3 className="text-xs sm:text-base font-bold text-white truncate">
                   🤖 {player2.name}
                 </h3>
               ) : editingPlayer === player2.id ? (
@@ -575,47 +639,80 @@ export function TicTacToe() {
                   value={editName}
                   onChange={(e) => setEditName(e.target.value)}
                   onBlur={() => handleRename(player2.id)}
-                  onKeyPress={(e) => {
+                  onKeyDown={(e) => {
                     if (e.key === 'Enter') handleRename(player2.id);
                   }}
-                  className="px-2 py-1 text-sm rounded bg-slate-700 text-white border border-slate-500 focus:outline-none focus:border-red-500 w-full"
+                  className="px-2 py-1 text-xs sm:text-sm rounded-lg bg-slate-700 text-white border border-rose-500/50 focus:outline-none focus:border-rose-400 w-full"
                 />
               ) : (
                 <h3
-                  className="text-sm sm:text-lg font-bold text-white cursor-pointer hover:text-red-400 truncate"
-                  onClick={() => {
-                    setEditingPlayer(player2.id);
-                    setEditName(player2.name);
-                  }}
+                  className="text-xs sm:text-base font-bold text-white cursor-pointer hover:text-rose-400 truncate transition-colors"
+                  onClick={() => { setEditingPlayer(player2.id); setEditName(player2.name); }}
+                  title="Click to rename"
                 >
                   {player2.name}
                 </h3>
               )}
             </div>
-            <span className="text-xl sm:text-2xl font-bold text-red-400 flex-shrink-0">O</span>
+            <span className="text-lg sm:text-2xl font-black text-rose-400 flex-shrink-0">O</span>
           </div>
-          <div className="space-y-2 text-xs sm:text-sm">
-            <div className="flex justify-between">
-              <span className="text-slate-300">Wins:</span>
-              <span className="font-semibold text-green-400">{player2.wins}</span>
+          <div className="grid grid-cols-3 gap-1 text-center">
+            <div className="rounded-lg bg-green-500/10 py-1.5">
+              <p className="text-xs sm:text-sm font-bold text-green-400">{player2.wins}</p>
+              <p className="text-xs text-slate-500">W</p>
             </div>
-            <div className="flex justify-between">
-              <span className="text-slate-300">Losses:</span>
-              <span className="font-semibold text-red-400">{player2.losses}</span>
+            <div className="rounded-lg bg-red-500/10 py-1.5">
+              <p className="text-xs sm:text-sm font-bold text-red-400">{player2.losses}</p>
+              <p className="text-xs text-slate-500">L</p>
             </div>
-            <div className="flex justify-between">
-              <span className="text-slate-300">Draws:</span>
-              <span className="font-semibold text-yellow-400">{player2.draws}</span>
-            </div>
-            <div className="flex justify-between pt-2 border-t border-slate-600">
-              <span className="text-slate-300">Total:</span>
-              <span className="font-semibold text-white">
-                {player2.wins + player2.losses + player2.draws}
-              </span>
+            <div className="rounded-lg bg-yellow-500/10 py-1.5">
+              <p className="text-xs sm:text-sm font-bold text-yellow-400">{player2.draws}</p>
+              <p className="text-xs text-slate-500">D</p>
             </div>
           </div>
         </div>
       </div>
+
+      {/* New Game confirmation */}
+      {showResetConfirm && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+          onClick={() => setShowResetConfirm(false)}
+        >
+          <div
+            className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl border border-violet-500/40 shadow-2xl max-w-sm w-full p-6 animate-bounce-in"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="text-center mb-5">
+              <div className="text-4xl mb-3">{!gameStarted || gameOver ? '🎮' : '⚠️'}</div>
+              <h3 className="text-lg sm:text-xl font-black text-white mb-1.5">
+                Start a new game?
+              </h3>
+              <p className="text-sm text-slate-400">
+                {!gameStarted
+                  ? `Ready to play ${gameMode === 'ai' ? 'against the computer' : 'a match'}?`
+                  : gameOver
+                  ? 'Begin a fresh round on the same board.'
+                  : 'Your current game progress will be lost.'}
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowResetConfirm(false)}
+                className="flex-1 px-4 py-2.5 rounded-xl bg-white/8 border border-white/10 text-slate-300 hover:text-white hover:bg-white/12 transition-all duration-200 font-semibold text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmReset}
+                className="flex-1 px-4 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 text-white font-semibold text-sm shadow-lg shadow-violet-500/30 transition-all duration-200"
+              >
+                Start
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

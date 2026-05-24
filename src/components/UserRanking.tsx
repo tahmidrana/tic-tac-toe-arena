@@ -1,63 +1,79 @@
 import { useGameStore } from '../store/gameStore';
 
+const RANK_BADGES = ['👑', '🥈', '🥉', '🎖️'];
+const RANK_COLORS = [
+  'text-yellow-400 bg-yellow-500/10 border-yellow-500/30',
+  'text-slate-300 bg-slate-500/10 border-slate-500/30',
+  'text-amber-600 bg-amber-700/10 border-amber-700/30',
+  'text-slate-400 bg-slate-700/10 border-slate-700/30',
+];
+
 export function UserRanking() {
   const { getRankedUsers } = useGameStore();
   const rankedUsers = getRankedUsers();
 
-  const calculateWinRate = (wins: number, losses: number, draws: number) => {
+  const winRate = (wins: number, losses: number, draws: number) => {
     const total = wins + losses + draws;
-    if (total === 0) return 0;
-    return ((wins / total) * 100).toFixed(1);
-  };
-
-  const calculateRank = (index: number) => {
-    const ranks = ['👑', '🥈', '🥉', '🎖️'];
-    return ranks[index] || `${index + 1}#`;
+    return total === 0 ? 0 : Math.round((wins / total) * 100);
   };
 
   return (
-    <div className="rounded-xl bg-gradient-to-r from-purple-900/50 to-pink-900/50 p-6 backdrop-blur-sm border border-purple-500/30">
-      <div className="mb-6">
-        <h2 className="text-2xl font-bold text-white mb-2">Leaderboard</h2>
-        <p className="text-slate-400 text-sm">Global Rankings</p>
+    <div className="rounded-2xl bg-slate-900/70 backdrop-blur-md border border-white/8 shadow-xl overflow-hidden">
+      {/* Header */}
+      <div className="px-5 py-4 border-b border-white/5">
+        <h2 className="text-base sm:text-lg font-black text-white">Leaderboard</h2>
+        <p className="text-xs text-slate-500 mt-0.5">Ranked by win rate</p>
       </div>
 
-      <div className="space-y-3">
+      {/* Rankings */}
+      <div className="p-3 sm:p-4 space-y-2">
         {rankedUsers.map((user, index) => {
-          const totalGames = user.wins + user.losses + user.draws;
-          const winRate = calculateWinRate(user.wins, user.losses, user.draws);
+          const total = user.wins + user.losses + user.draws;
+          const rate = winRate(user.wins, user.losses, user.draws);
 
           return (
             <div
               key={user.id}
-              className="p-4 rounded-lg bg-slate-800/50 border border-slate-600 hover:border-purple-500/50 transition-all duration-200 hover:bg-slate-800/70"
+              className={`rounded-xl p-3 sm:p-4 border transition-all duration-200 hover:bg-white/4 ${
+                index === 0
+                  ? 'bg-yellow-500/5 border-yellow-500/20'
+                  : 'bg-white/2 border-white/6'
+              }`}
             >
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-3">
-                  <span className="text-2xl">{calculateRank(index)}</span>
-                  <div>
-                    <p className="font-semibold text-white">{user.name}</p>
-                    <p className="text-xs text-slate-400">{totalGames} games played</p>
-                  </div>
+              <div className="flex items-center gap-3 mb-2.5">
+                <span className={`text-sm font-bold w-7 h-7 rounded-lg flex items-center justify-center border flex-shrink-0 ${RANK_COLORS[index] ?? RANK_COLORS[3]}`}>
+                  {RANK_BADGES[index] ?? `${index + 1}`}
+                </span>
+                <div className="flex-1 min-w-0">
+                  <p className="font-bold text-white text-sm truncate">{user.name}</p>
+                  <p className="text-xs text-slate-500">{total} games</p>
                 </div>
-                <div className="text-right">
-                  <p className="text-lg font-bold text-green-400">{user.wins}W</p>
-                  <p className="text-xs text-slate-400">{winRate}% win rate</p>
+                <div className="text-right flex-shrink-0">
+                  <p className="text-sm font-black text-emerald-400">{rate}%</p>
+                  <p className="text-xs text-slate-500">win rate</p>
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-2 text-center text-xs">
-                <div className="rounded bg-green-500/20 py-2 px-1">
-                  <p className="text-green-400 font-semibold">{user.wins}</p>
-                  <p className="text-slate-400">Wins</p>
+              {/* Win rate bar */}
+              <div className="w-full bg-white/5 rounded-full h-1.5 mb-2">
+                <div
+                  className="h-1.5 rounded-full bg-gradient-to-r from-emerald-500 to-teal-400 transition-all duration-500"
+                  style={{ width: `${rate}%` }}
+                />
+              </div>
+
+              <div className="grid grid-cols-3 gap-1.5 text-center">
+                <div className="rounded-lg bg-emerald-500/10 py-1">
+                  <p className="text-xs font-bold text-emerald-400">{user.wins}</p>
+                  <p className="text-xs text-slate-600">W</p>
                 </div>
-                <div className="rounded bg-red-500/20 py-2 px-1">
-                  <p className="text-red-400 font-semibold">{user.losses}</p>
-                  <p className="text-slate-400">Losses</p>
+                <div className="rounded-lg bg-red-500/10 py-1">
+                  <p className="text-xs font-bold text-red-400">{user.losses}</p>
+                  <p className="text-xs text-slate-600">L</p>
                 </div>
-                <div className="rounded bg-yellow-500/20 py-2 px-1">
-                  <p className="text-yellow-400 font-semibold">{user.draws}</p>
-                  <p className="text-slate-400">Draws</p>
+                <div className="rounded-lg bg-yellow-500/10 py-1">
+                  <p className="text-xs font-bold text-yellow-400">{user.draws}</p>
+                  <p className="text-xs text-slate-600">D</p>
                 </div>
               </div>
             </div>
@@ -65,14 +81,10 @@ export function UserRanking() {
         })}
       </div>
 
-      {/* Legend */}
-      <div className="mt-6 pt-6 border-t border-slate-600">
-        <p className="text-xs text-slate-400 mb-3">Ranking System</p>
-        <div className="space-y-2 text-xs text-slate-400">
-          <p>📊 Ranked by win rate</p>
-          <p>🎯 Tiebreaker: Total wins</p>
-          <p>🏆 Live leaderboard</p>
-        </div>
+      {/* Footer */}
+      <div className="px-5 py-3 border-t border-white/5 flex items-center gap-2">
+        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse block" />
+        <p className="text-xs text-slate-500">Live leaderboard · Tiebreaker: total wins</p>
       </div>
     </div>
   );
