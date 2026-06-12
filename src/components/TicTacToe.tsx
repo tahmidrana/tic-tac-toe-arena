@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useGameStore } from '../store/gameStore';
+import { useAuth } from '../store/authStore';
 import { Confetti } from './Confetti';
 import { WinAnimation } from './WinAnimation';
 import { LossAnimation } from './LossAnimation';
@@ -12,6 +13,7 @@ import { calculateWinner } from '../utils/winLogic';
 
 
 export function TicTacToe() {
+  const { user } = useAuth();
   const { users, recordWin, recordLoss, recordDraw, renameUser } = useGameStore();
   const [boardSize, setBoardSize] = useState<BoardSize>(3);
   const [board, setBoard] = useState<(string | null)[]>(Array(9).fill(null));
@@ -372,26 +374,6 @@ export function TicTacToe() {
         <Confetti trigger={gameOver && winner !== null} />
       )}
 
-      {/* Toolbar: mode toggle + settings */}
-      <div className="flex items-center gap-2 sm:gap-3">
-        <div className="flex-1 min-w-0">
-          <GameModeSelector
-            selectedMode={gameMode}
-            onModeChange={handleGameModeChange}
-            disabled={gameStarted && !gameOver}
-          />
-        </div>
-        <button
-          onClick={() => setShowSettings(true)}
-          disabled={gameStarted && !gameOver}
-          className={`flex-shrink-0 h-10 w-10 sm:h-auto sm:w-auto sm:px-4 sm:py-2.5 rounded-xl bg-slate-800/80 border border-white/10 text-slate-400 hover:text-white hover:border-violet-500/50 hover:bg-slate-700/80 transition-all duration-200 flex items-center justify-center gap-2 text-sm font-medium ${gameStarted && !gameOver ? 'opacity-40 cursor-not-allowed' : ''}`}
-          title="Settings"
-        >
-          <span>⚙️</span>
-          <span className="hidden sm:inline">Settings</span>
-        </button>
-      </div>
-
       {/* Settings Modal */}
       <SettingsModal
         isOpen={showSettings}
@@ -422,6 +404,26 @@ export function TicTacToe() {
             ? 'bg-gradient-to-r from-transparent via-violet-400/50 to-transparent'
             : 'bg-gradient-to-r from-transparent via-white/10 to-transparent'
         }`} />
+
+        {/* Toolbar: mode toggle + settings — lives inside the card */}
+        <div className="flex items-center gap-2 px-3 sm:px-4 pt-3 pb-3 border-b border-white/5">
+          <div className="flex-1 min-w-0">
+            <GameModeSelector
+              selectedMode={gameMode}
+              onModeChange={handleGameModeChange}
+              disabled={gameStarted && !gameOver}
+            />
+          </div>
+          <button
+            onClick={() => setShowSettings(true)}
+            disabled={gameStarted && !gameOver}
+            className={`flex-shrink-0 h-10 w-10 rounded-xl bg-slate-800/80 border border-white/10 text-slate-400 hover:text-white hover:border-violet-500/50 hover:bg-slate-700/80 transition-all duration-200 flex items-center justify-center text-base ${gameStarted && !gameOver ? 'opacity-40 cursor-not-allowed' : ''}`}
+            title="Settings"
+          >
+            ⚙️
+          </button>
+        </div>
+
         {/* Status bar */}
         <div className="text-center px-4 sm:px-6 pt-5 pb-4 border-b border-white/5">
           <div className="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-2">
@@ -592,9 +594,9 @@ export function TicTacToe() {
 
       </div>
 
-      {/* Player Stats — portaled to the right column. Opponent is only shown
-          when a match is actually running (gameStarted). */}
-      {statsSlot && createPortal(
+      {/* Player Stats — portaled to the right column. Only shown when signed in.
+          Opponent is only shown when a match is actually running (gameStarted). */}
+      {statsSlot && user && createPortal(
         <div className={`grid gap-3 sm:gap-4 ${gameStarted ? 'grid-cols-2' : 'grid-cols-1'}`}>
           {/* Player 1 */}
           <div

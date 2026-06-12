@@ -8,32 +8,55 @@ export function GameModeSelector({
   disabled?: boolean;
 }) {
   return (
-    <div className={`flex bg-slate-800/80 rounded-xl p-1 border border-white/10 shadow-inner gap-1 transition-opacity duration-200 ${disabled ? 'opacity-40 pointer-events-none' : ''}`}>
+    <div className={`grid grid-cols-2 gap-2 transition-opacity duration-200 ${disabled ? 'opacity-40 pointer-events-none' : ''}`}>
+      {/* PvP */}
       <button
         onClick={() => onModeChange('pvp')}
         disabled={disabled}
-        className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold transition-all duration-200 ${
+        className={`relative flex items-center gap-2.5 px-3 py-2.5 rounded-xl border transition-all duration-200 overflow-hidden ${
           selectedMode === 'pvp'
-            ? 'bg-gradient-to-r from-sky-600 to-blue-600 text-white shadow-md shadow-sky-500/20'
-            : 'text-slate-400 hover:text-white hover:bg-white/5'
+            ? 'bg-gradient-to-r from-sky-600/25 to-blue-700/15 border-sky-500/50 shadow-md shadow-sky-500/10'
+            : 'bg-slate-800/50 border-white/8 hover:bg-slate-800/80 hover:border-white/15'
         }`}
       >
-        <span>👥</span>
-        <span className="hidden sm:inline">Player vs Player</span>
-        <span className="sm:hidden">PvP</span>
+        {selectedMode === 'pvp' && (
+          <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-sky-400/50 to-transparent" />
+        )}
+        <span className={`text-xl transition-all ${selectedMode === 'pvp' ? 'scale-110' : 'opacity-60'}`}>👥</span>
+        <div className="text-left min-w-0">
+          <p className={`text-xs font-black leading-tight ${selectedMode === 'pvp' ? 'text-white' : 'text-slate-400'}`}>
+            Player vs Player
+          </p>
+          <p className="text-[10px] text-slate-600 hidden sm:block">Two humans</p>
+        </div>
+        {selectedMode === 'pvp' && (
+          <span className="ml-auto flex-shrink-0 w-1.5 h-1.5 rounded-full bg-sky-400" />
+        )}
       </button>
+
+      {/* vs AI */}
       <button
         onClick={() => onModeChange('ai')}
         disabled={disabled}
-        className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold transition-all duration-200 ${
+        className={`relative flex items-center gap-2.5 px-3 py-2.5 rounded-xl border transition-all duration-200 overflow-hidden ${
           selectedMode === 'ai'
-            ? 'bg-gradient-to-r from-violet-600 to-purple-600 text-white shadow-md shadow-violet-500/20'
-            : 'text-slate-400 hover:text-white hover:bg-white/5'
+            ? 'bg-gradient-to-r from-violet-600/25 to-purple-700/15 border-violet-500/50 shadow-md shadow-violet-500/10'
+            : 'bg-slate-800/50 border-white/8 hover:bg-slate-800/80 hover:border-white/15'
         }`}
       >
-        <span>🤖</span>
-        <span className="hidden sm:inline">vs AI</span>
-        <span className="sm:hidden">AI</span>
+        {selectedMode === 'ai' && (
+          <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-violet-400/50 to-transparent" />
+        )}
+        <span className={`text-xl transition-all ${selectedMode === 'ai' ? 'scale-110' : 'opacity-60'}`}>🤖</span>
+        <div className="text-left min-w-0">
+          <p className={`text-xs font-black leading-tight ${selectedMode === 'ai' ? 'text-white' : 'text-slate-400'}`}>
+            vs AI
+          </p>
+          <p className="text-[10px] text-slate-600 hidden sm:block">Play solo</p>
+        </div>
+        {selectedMode === 'ai' && (
+          <span className="ml-auto flex-shrink-0 w-1.5 h-1.5 rounded-full bg-violet-400" />
+        )}
       </button>
     </div>
   );
