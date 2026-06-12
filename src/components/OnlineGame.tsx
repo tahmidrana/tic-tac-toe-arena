@@ -17,6 +17,17 @@ import {
   findWaitingRoom,
   type OnlineRoom,
 } from '../utils/onlineGameService';
+import {
+  deductCoins,
+  awardCoins,
+  canGuestPlay,
+  getGuestGamesRemaining,
+  recordGuestGame,
+  ONLINE_FEE,
+  ONLINE_PRIZE,
+  ONLINE_DRAW_REFUND,
+  GUEST_LIMIT,
+} from '../utils/coinService';
 import { Confetti } from './Confetti';
 import { WinAnimation } from './WinAnimation';
 import { LossAnimation } from './LossAnimation';
@@ -65,6 +76,9 @@ export function OnlineGame() {
   const [rematchRequested, setRematchRequested] = useState(false);
   const [showRematchDialog, setShowRematchDialog] = useState(false);
   const [readyConfirmed, setReadyConfirmed] = useState(false);
+  const [coinError, setCoinError] = useState<string | null>(null);
+  const [guestRemaining, setGuestRemaining] = useState(() => getGuestGamesRemaining());
+  const [coinDelta, setCoinDelta] = useState<number | undefined>(undefined);
 
   const roomCodeRef = useRef('');
   const myRoleRef = useRef<'player1' | 'player2' | null>(null);
@@ -87,6 +101,10 @@ export function OnlineGame() {
     () => user?.displayName ?? guestName,
     [user, guestName],
   );
+
+  const isGuest = !user;
+  const bothLoggedIn =
+    room?.player1?.isGuest === false && room?.player2?.isGuest === false;
 
   useEffect(() => { roomCodeRef.current = roomCode; }, [roomCode]);
   useEffect(() => { myRoleRef.current = myRole; }, [myRole]);
@@ -139,6 +157,10 @@ export function OnlineGame() {
         // both players: readycheck → playing when both confirm ready
         if (r?.status === 'playing' && phaseRef.current === 'readycheck') {
           setPhase('playing');
+          if (isGuest) {
+            recordGuestGame();
+            setGuestRemaining(getGuestGamesRemaining());
+          }
         }
         if (r === null && phaseRef.current !== 'lobby') {
           setError('Room no longer exists.');
@@ -161,14 +183,27 @@ export function OnlineGame() {
     if (!room?.gameOver || resultRecordedRef.current || !myRole) return;
     resultRecordedRef.current = true;
     const mySymbol = myRole === 'player1' ? 'X' : 'O';
+    const coinStakes = user && bothLoggedIn;
+
     if (room.winner === 'draw') {
       recordDraw([myLocalPlayer.id]);
+      if (coinStakes) {
+        awardCoins(user.uid, ONLINE_DRAW_REFUND).catch(console.error);
+        setCoinDelta(ONLINE_DRAW_REFUND);
+      }
     } else if (room.winner === mySymbol) {
       recordWin(myLocalPlayer.id);
+      if (coinStakes) {
+        awardCoins(user.uid, ONLINE_PRIZE).catch(console.error);
+        setCoinDelta(ONLINE_PRIZE);
+      }
     } else {
       recordLoss(myLocalPlayer.id);
+      // Loser: coins already deducted at ready-check
+      if (coinStakes) setCoinDelta(-ONLINE_FEE);
     }
-  }, [room?.gameOver, myRole, room?.winner, myLocalPlayer?.id, recordWin, recordLoss, recordDraw]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [room?.gameOver, myRole, room?.winner, myLocalPlayer?.id]);
 
   useEffect(() => {
     return () => {
@@ -193,6 +228,7 @@ export function OnlineGame() {
       setShowRematchDialog(false);
       setShowWinNotice(true);
       setShowLossNotice(true);
+      setCoinDelta(undefined);
       setTimeLeft(TURN_SECONDS);
     }
     prevGameOverRef.current = room.gameOver;
@@ -234,13 +270,18 @@ export function OnlineGame() {
     setRematchRequested(false);
     setShowRematchDialog(false);
     setReadyConfirmed(false);
+    setCoinDelta(undefined);
   };
 
   const handleCreateRoom = async () => {
     setError(null);
+    if (isGuest && !canGuestPlay()) {
+      setError(`Guest limit reached — you can play ${GUEST_LIMIT} free games per hour. Sign in for unlimited play!`);
+      return;
+    }
     setPhase('loading');
     try {
-      const code = await createRoom(getPlayerId(), getPlayerName(), boardSize);
+      const code = await createRoom(getPlayerId(), getPlayerName(), boardSize, isGuest);
       setRoomCode(code);
       setMyRole('player1');
       setPhase('waiting');
@@ -258,10 +299,14 @@ export function OnlineGame() {
       setError('Please enter a valid 5-digit code.');
       return;
     }
+    if (isGuest && !canGuestPlay()) {
+      setError(`Guest limit reached — you can play ${GUEST_LIMIT} free games per hour. Sign in for unlimited play!`);
+      return;
+    }
     setError(null);
     setPhase('loading');
     try {
-      const result = await joinRoomByCode(code, getPlayerId(), getPlayerName());
+      const result = await joinRoomByCode(code, getPlayerId(), getPlayerName(), isGuest);
       if (result === 'ok') {
         setRoomCode(code);
         setMyRole('player2');
@@ -285,6 +330,10 @@ export function OnlineGame() {
 
   const handleFindRandom = async () => {
     setError(null);
+    if (isGuest && !canGuestPlay()) {
+      setError(`Guest limit reached — you can play ${GUEST_LIMIT} free games per hour. Sign in for unlimited play!`);
+      return;
+    }
     setIsSearching(true);
     setWaitElapsed(0);
     setPhase('loading');
@@ -292,22 +341,21 @@ export function OnlineGame() {
       const found = await findWaitingRoom(getPlayerId(), boardSize);
       if (found) {
         setIsSearching(false);
-        const result = await joinRoomByCode(found.roomCode, getPlayerId(), getPlayerName());
+        const result = await joinRoomByCode(found.roomCode, getPlayerId(), getPlayerName(), isGuest);
         if (result === 'ok') {
           setRoomCode(found.roomCode);
           setMyRole('player2');
           setReadyConfirmed(false);
           setPhase('readycheck');
         } else {
-          // Room was taken between find and join — fall back to creating one
-          const code = await createRoom(getPlayerId(), getPlayerName(), boardSize);
+          const code = await createRoom(getPlayerId(), getPlayerName(), boardSize, isGuest);
           setRoomCode(code);
           setMyRole('player1');
           setPhase('waiting');
           setWaitElapsed(0);
         }
       } else {
-        const code = await createRoom(getPlayerId(), getPlayerName(), boardSize);
+        const code = await createRoom(getPlayerId(), getPlayerName(), boardSize, isGuest);
         setRoomCode(code);
         setMyRole('player1');
         setPhase('waiting');
@@ -379,12 +427,27 @@ export function OnlineGame() {
 
   const handleReady = async () => {
     if (!myRole || !roomCode) return;
+    setCoinError(null);
+
+    // Deduct entry fee if both players are logged-in users
+    if (user && bothLoggedIn) {
+      const result = await deductCoins(user.uid, ONLINE_FEE);
+      if (result === 'insufficient') {
+        setCoinError(`Not enough coins — you need ${ONLINE_FEE} 🪙 to enter this match.`);
+        return;
+      }
+    }
+
     setReadyConfirmed(true);
     try {
       await confirmReady(roomCode, myRole);
     } catch (e) {
       console.error('[online] confirmReady failed:', e);
       setReadyConfirmed(false);
+      // Refund if the ready confirmation itself failed after deduction
+      if (user && bothLoggedIn) {
+        awardCoins(user.uid, ONLINE_FEE).catch(console.error);
+      }
     }
   };
 
@@ -559,6 +622,26 @@ export function OnlineGame() {
               )}
             </div>
 
+            {/* Guest rate-limit notice */}
+            {isGuest && (
+              <div className="rounded-xl bg-slate-800/60 border border-white/8 px-4 py-2.5 flex items-center justify-between gap-3 text-xs">
+                <span className="text-slate-400">
+                  Guest: <span className="text-white font-bold">{guestRemaining}</span>/{GUEST_LIMIT} free games this hour
+                </span>
+                <span className="text-violet-300 font-semibold shrink-0">Sign in for unlimited + coins</span>
+              </div>
+            )}
+
+            {/* Logged-in coin stake notice */}
+            {!isGuest && (
+              <div className="rounded-xl bg-amber-500/8 border border-amber-400/20 px-4 py-2.5 flex items-center justify-between gap-3 text-xs">
+                <span className="text-amber-300 font-semibold">
+                  🪙 {ONLINE_FEE} entry · 🏆 {ONLINE_PRIZE} prize · 🤝 draw refunds {ONLINE_DRAW_REFUND}
+                </span>
+                <span className="text-slate-500 shrink-0">vs logged-in players only</span>
+              </div>
+            )}
+
             {error && (
               <div className="rounded-xl bg-red-500/10 border border-red-500/30 px-4 py-3 text-sm text-red-300 text-center">
                 {error}
@@ -665,6 +748,18 @@ export function OnlineGame() {
             <p className="text-xs text-emerald-400 font-semibold animate-pulse">
               {opName} is ready — your turn to confirm!
             </p>
+          )}
+
+          {/* Coin stake notice */}
+          {bothLoggedIn && (
+            <div className="w-full px-3 py-2 rounded-xl bg-amber-500/10 border border-amber-400/25 text-xs text-amber-300 text-center font-semibold">
+              🪙 {ONLINE_FEE} entry fee · Winner takes 🏆 {ONLINE_PRIZE} · Draw refunds {ONLINE_DRAW_REFUND}
+            </div>
+          )}
+          {coinError && (
+            <div className="w-full px-3 py-2 rounded-xl bg-red-500/10 border border-red-500/30 text-xs text-red-300 text-center">
+              {coinError}
+            </div>
           )}
 
           <div className="flex gap-3 w-full">
@@ -855,6 +950,7 @@ export function OnlineGame() {
             playerName={iWon ? getPlayerName() : 'Both Players'}
             onClose={() => setShowWinNotice(false)}
             isDraw={winnerSymbol === 'draw'}
+            coinDelta={coinDelta}
           />
         )}
         {showLossNotice && room.gameOver && winnerSymbol !== 'draw' && !iWon && (
@@ -863,6 +959,7 @@ export function OnlineGame() {
             playerName="You Lost!"
             isPlayerWin={false}
             onClose={() => setShowLossNotice(false)}
+            coinDelta={coinDelta}
           />
         )}
 

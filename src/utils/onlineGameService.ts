@@ -21,6 +21,7 @@ import {
 export interface OnlinePlayer {
   uid: string;
   name: string;
+  isGuest?: boolean;
 }
 
 export interface OnlineRoom {
@@ -67,6 +68,7 @@ export async function createRoom(
   uid: string,
   name: string,
   boardSize: number,
+  isGuest = false,
 ): Promise<string> {
   if (!db) throw new Error('Firebase not configured');
 
@@ -85,7 +87,7 @@ export async function createRoom(
     gameOver: false,
     winner: null,
     winningLine: null,
-    player1: { uid, name },
+    player1: { uid, name, isGuest },
     player2: null,
     status: 'waiting',
     expireAt: mins(10), // waiting rooms expire in 10 min if nobody joins
@@ -100,6 +102,7 @@ export async function joinRoomByCode(
   code: string,
   uid: string,
   name: string,
+  isGuest = false,
 ): Promise<'ok' | 'not_found' | 'full' | 'self'> {
   if (!db) throw new Error('Firebase not configured');
 
@@ -112,10 +115,10 @@ export async function joinRoomByCode(
   if (data.player1?.uid === uid) return 'self';
 
   await updateDoc(ref, {
-    player2: { uid, name },
+    player2: { uid, name, isGuest },
     status: 'confirming',
     ready: { player1: false, player2: false },
-    expireAt: mins(5), // 5 min to complete the ready-check or room is cleaned up
+    expireAt: mins(5),
     updatedAt: serverTimestamp(),
   });
 

@@ -6,6 +6,7 @@ import { AuthButton } from './components/AuthButton';
 import { SignInBanner } from './components/SignInBanner';
 import { useAuth } from './store/authStore';
 import { LogoIcon } from './components/LogoIcon';
+import { CoinBadge } from './components/CoinBadge';
 
 type TopMode = 'local' | 'online';
 
@@ -26,7 +27,10 @@ export default function App() {
                 Tic Tac Toe <span className="text-violet-400">Arena</span>
               </h1>
             </div>
-            <AuthButton />
+            <div className="flex items-center gap-2 sm:gap-3">
+              <CoinBadge />
+              <AuthButton />
+            </div>
           </div>
         </div>
       </header>

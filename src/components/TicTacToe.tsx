@@ -10,6 +10,7 @@ import { SettingsModal } from './SettingsModal';
 import { type BoardSize } from './BoardSizeSelector';
 import { AIPlayer, Difficulty } from '../utils/aiPlayer';
 import { calculateWinner } from '../utils/winLogic';
+import { deductCoins, awardCoins, AI_CONFIG } from '../utils/coinService';
 
 
 export function TicTacToe() {
@@ -34,6 +35,7 @@ export function TicTacToe() {
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
   const [leaveLoserName, setLeaveLoserName] = useState<string | null>(null);
+  const [coinError, setCoinError] = useState<string | null>(null);
   // Game is idle (board disabled) until the user explicitly starts a game.
   const [gameStarted, setGameStarted] = useState(false);
   // Portal target in the right column for player stats.
@@ -78,6 +80,11 @@ export function TicTacToe() {
       setGameOver(true);
       setWinner('draw');
       recordDraw([player1.id, player2.id]);
+      // Refund entry fee on draw vs AI
+      if (user) {
+        const cfg = AI_CONFIG[difficulty];
+        if (cfg) awardCoins(user.uid, cfg.drawRefund).catch(console.error);
+      }
       setAiThinking(false);
       return;
     }
@@ -100,9 +107,13 @@ export function TicTacToe() {
       setWinner(gameWinner);
       setWinningLine(line);
       setGameOver(true);
-      // Record win/loss
       recordWin(player1.id);
       recordLoss(player2.id);
+      // Award coin prize when logged-in player beats AI
+      if (user && gameMode === 'ai') {
+        const cfg = AI_CONFIG[difficulty];
+        if (cfg) awardCoins(user.uid, cfg.prize).catch(console.error);
+      }
       return;
     }
 
@@ -110,6 +121,11 @@ export function TicTacToe() {
       setGameOver(true);
       setWinner('draw');
       recordDraw([player1.id, player2.id]);
+      // Refund entry fee on draw vs AI
+      if (user && gameMode === 'ai') {
+        const cfg = AI_CONFIG[difficulty];
+        if (cfg) awardCoins(user.uid, cfg.drawRefund).catch(console.error);
+      }
       return;
     }
 
@@ -177,8 +193,21 @@ export function TicTacToe() {
     setGameStarted(false);
   };
 
-  const confirmReset = () => {
+  const confirmReset = async () => {
     setShowResetConfirm(false);
+    setCoinError(null);
+
+    if (user && gameMode === 'ai') {
+      const cfg = AI_CONFIG[difficulty];
+      if (cfg) {
+        const result = await deductCoins(user.uid, cfg.fee);
+        if (result === 'insufficient') {
+          setCoinError(`Not enough coins — you need ${cfg.fee} 🪙 to play on ${difficulty} difficulty.`);
+          return;
+        }
+      }
+    }
+
     resetGame();
     if (gameMode === 'ai') {
       renameUser(player2.id, 'AI');
@@ -318,22 +347,31 @@ export function TicTacToe() {
   const squareSize = getSquareSize();
 
 
+  // Coin delta for AI mode (only for logged-in users)
+  const aiCfg = AI_CONFIG[difficulty];
+  const aiCoinDelta = user && gameMode === 'ai' && aiCfg
+    ? winner === 'X'     ? aiCfg.prize
+    : winner === 'draw'  ? aiCfg.drawRefund
+    : winner === 'O'     ? -aiCfg.fee
+    : undefined
+    : undefined;
+
   return (
     <div className="space-y-3 sm:space-y-4">
       {/* Animations */}
       <Confetti trigger={gameOver && winner !== 'draw' && winner !== null} />
       {/* Win/Draw Animations - PvP: show winner, PvAI: show player result/draw */}
       {showWinNotice && gameMode === 'pvp' && winner !== 'draw' && (
-        <WinAnimation 
-          winner={winner} 
+        <WinAnimation
+          winner={winner}
           playerName={winnerPlayer?.name || 'Players'}
           onClose={() => setShowWinNotice(false)}
           isDraw={false}
         />
       )}
       {showWinNotice && gameMode === 'pvp' && winner === 'draw' && (
-        <WinAnimation 
-          winner={winner} 
+        <WinAnimation
+          winner={winner}
           playerName="Both Players"
           onClose={() => setShowWinNotice(false)}
           isDraw={true}
@@ -342,19 +380,21 @@ export function TicTacToe() {
 
       {/* AI Mode: Show player result or draw */}
       {showWinNotice && gameMode === 'ai' && winner === 'draw' && (
-        <WinAnimation 
-          winner={winner} 
+        <WinAnimation
+          winner={winner}
           playerName="You"
           onClose={() => setShowWinNotice(false)}
           isDraw={true}
+          coinDelta={aiCoinDelta}
         />
       )}
       {showLossNotice && gameMode === 'ai' && winner !== null && winner !== 'draw' && (
-        <LossAnimation 
-          show={gameOver && winner !== null && winner !== 'draw'} 
+        <LossAnimation
+          show={gameOver && winner !== null && winner !== 'draw'}
           playerName={winner === 'X' ? 'You Won!' : 'You Lost!'}
           isPlayerWin={winner === 'X'}
           onClose={() => setShowLossNotice(false)}
+          coinDelta={aiCoinDelta}
         />
       )}
 
@@ -424,11 +464,21 @@ export function TicTacToe() {
           </button>
         </div>
 
+        {/* Coin error banner */}
+        {coinError && (
+          <div className="mx-4 mt-3 px-3 py-2 rounded-xl bg-red-500/15 border border-red-500/30 text-xs text-red-300 text-center">
+            {coinError}
+          </div>
+        )}
+
         {/* Status bar */}
         <div className="text-center px-4 sm:px-6 pt-5 pb-4 border-b border-white/5">
           <div className="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-2">
             {boardSize}×{boardSize}
             {' · '}{boardSize === 3 ? '3 in a row' : '4 in a row'}
+            {user && gameMode === 'ai' && !gameStarted && AI_CONFIG[difficulty] && (
+              <span className="ml-2 text-amber-400 normal-case">· 🪙 {AI_CONFIG[difficulty].fee} entry</span>
+            )}
           </div>
           <h2 className={`text-xl sm:text-2xl font-black text-white ${gameOver ? 'animate-bounce-in' : ''}`}>
             {!gameStarted ? (
@@ -772,6 +822,23 @@ export function TicTacToe() {
                     : 'Ready to play a fresh match?'
                   : 'Your current game progress will be lost.'}
               </p>
+              {/* Coin fee notice for vs AI */}
+              {user && gameMode === 'ai' && (() => {
+                const cfg = AI_CONFIG[difficulty];
+                if (!cfg) return null;
+                const canAfford = (player1.coins ?? 0) >= cfg.fee;
+                return (
+                  <div className={`mt-3 flex items-center justify-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold ${
+                    canAfford
+                      ? 'bg-amber-500/10 border border-amber-400/25 text-amber-300'
+                      : 'bg-red-500/10 border border-red-500/25 text-red-400'
+                  }`}>
+                    <span>🪙 {cfg.fee} entry · 🏆 {cfg.prize} win · 🤝 {cfg.drawRefund} draw</span>
+                    <span className="text-slate-500">·</span>
+                    <span>Balance: {(player1.coins ?? 0).toLocaleString()}</span>
+                  </div>
+                );
+              })()}
             </div>
             <div className="flex gap-3">
               <button
@@ -782,7 +849,8 @@ export function TicTacToe() {
               </button>
               <button
                 onClick={confirmReset}
-                className="flex-1 px-4 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 text-white font-semibold text-sm shadow-lg shadow-violet-500/30 transition-all duration-200"
+                disabled={!!user && gameMode === 'ai' && !!AI_CONFIG[difficulty] && (player1.coins ?? 0) < AI_CONFIG[difficulty].fee}
+                className="flex-1 px-4 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 text-white font-semibold text-sm shadow-lg shadow-violet-500/30 transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 Start
               </button>

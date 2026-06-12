@@ -10,6 +10,7 @@ import {
 } from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth, db, isFirebaseConfigured } from '../config/firebase';
+import { INITIAL_COINS } from '../utils/coinService';
 
 export interface User {
   id: string;
@@ -17,6 +18,7 @@ export interface User {
   wins: number;
   losses: number;
   draws: number;
+  coins: number;
 }
 
 export interface GameState {
@@ -29,8 +31,8 @@ export interface GameState {
 
 const STORAGE_KEY = 'ticTacToeUsers';
 const DEFAULT_USERS: User[] = [
-  { id: '1', name: 'Player 1', wins: 0, losses: 0, draws: 0 },
-  { id: '2', name: 'Player 2', wins: 0, losses: 0, draws: 0 },
+  { id: '1', name: 'Player 1', wins: 0, losses: 0, draws: 0, coins: 0 },
+  { id: '2', name: 'Player 2', wins: 0, losses: 0, draws: 0, coins: 0 },
 ];
 
 const loadUsers = (): User[] => {
@@ -111,9 +113,14 @@ export const useGameStore = () => {
           wins: 0,
           losses: 0,
           draws: 0,
+          coins: INITIAL_COINS,
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
         });
+      } else if ((snap.data().coins as number | undefined) === undefined) {
+        // Existing user created before the coin system — grant initial coins.
+        updateDoc(userRef, { coins: INITIAL_COINS, updatedAt: serverTimestamp() })
+          .catch((e) => console.error('Failed to initialize coins:', e));
       }
 
       // Live-sync player1 from Firestore.
@@ -126,6 +133,7 @@ export const useGameStore = () => {
           wins: (data.wins as number) ?? 0,
           losses: (data.losses as number) ?? 0,
           draws: (data.draws as number) ?? 0,
+          coins: (data.coins as number) ?? INITIAL_COINS,
         };
         setUsers((prev) => [player1, prev[1] ?? DEFAULT_USERS[1]]);
       });
