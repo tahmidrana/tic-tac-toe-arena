@@ -833,7 +833,7 @@ export function TicTacToe() {
                       ? 'bg-amber-500/10 border border-amber-400/25 text-amber-300'
                       : 'bg-red-500/10 border border-red-500/25 text-red-400'
                   }`}>
-                    <span>🪙 {cfg.fee} entry · 🏆 {cfg.prize} win · 🤝 {cfg.drawRefund} draw</span>
+                    <span>🪙 {cfg.fee} entry · 🏆 {cfg.prize} win</span>
                     <span className="text-slate-500">·</span>
                     <span>Balance: {(player1.coins ?? 0).toLocaleString()}</span>
                   </div>

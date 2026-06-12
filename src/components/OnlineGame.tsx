@@ -636,7 +636,7 @@ export function OnlineGame() {
             {!isGuest && (
               <div className="rounded-xl bg-amber-500/8 border border-amber-400/20 px-4 py-2.5 flex items-center justify-between gap-3 text-xs">
                 <span className="text-amber-300 font-semibold">
-                  🪙 {ONLINE_FEE} entry · 🏆 {ONLINE_PRIZE} prize · 🤝 draw refunds {ONLINE_DRAW_REFUND}
+                  🪙 {ONLINE_FEE} entry · 🏆 {ONLINE_PRIZE} prize
                 </span>
                 <span className="text-slate-500 shrink-0">vs logged-in players only</span>
               </div>

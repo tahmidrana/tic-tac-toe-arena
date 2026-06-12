@@ -23,7 +23,7 @@ export default function App() {
             <div className="flex items-center gap-3">
               <LogoIcon size={36} className="drop-shadow-lg flex-shrink-0 sm:hidden" />
               <LogoIcon size={40} className="drop-shadow-lg flex-shrink-0 hidden sm:block" />
-              <h1 className="text-lg sm:text-2xl font-black text-white tracking-tight">
+              <h1 className="hidden sm:block text-lg sm:text-2xl font-black text-white tracking-tight">
                 Tic Tac Toe <span className="text-violet-400">Arena</span>
               </h1>
             </div>

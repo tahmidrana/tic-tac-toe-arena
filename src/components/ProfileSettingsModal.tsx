@@ -5,10 +5,11 @@ import { useGlobalLeaderboard } from '../store/leaderboardStore';
 
 interface Props {
   onClose: () => void;
+  onSignOut?: () => void;
 }
 
-export function ProfileSettingsModal({ onClose }: Props) {
-  const { user, updateDisplayName } = useAuth();
+export function ProfileSettingsModal({ onClose, onSignOut }: Props) {
+  const { user, updateDisplayName, signOut } = useAuth();
   const { currentUser: lbUser } = useGlobalLeaderboard();
 
   const displayName = user?.displayName || user?.email || 'Player';
@@ -18,6 +19,8 @@ export function ProfileSettingsModal({ onClose }: Props) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [showSignOutConfirm, setShowSignOutConfirm] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -45,6 +48,18 @@ export function ProfileSettingsModal({ onClose }: Props) {
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') handleSave();
     if (e.key === 'Escape') onClose();
+  };
+
+  const handleSignOut = async () => {
+    setShowSignOutConfirm(false);
+    setSigningOut(true);
+    try {
+      await signOut();
+      onSignOut?.();
+      onClose();
+    } finally {
+      setSigningOut(false);
+    }
   };
 
   const wins = lbUser?.wins ?? 0;
@@ -153,23 +168,86 @@ export function ProfileSettingsModal({ onClose }: Props) {
             </p>
           </div>
 
-          <div className="flex gap-3 pt-1">
+          <div className="space-y-2">
+            <div className="flex gap-3">
+              <button
+                onClick={onClose}
+                className="flex-1 px-4 py-2.5 rounded-xl bg-white/8 border border-white/10 text-slate-300 hover:text-white hover:bg-white/12 transition-all font-semibold text-sm"
+              >
+                Close
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={!isDirty || saving}
+                className="flex-1 px-4 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 text-white font-semibold text-sm shadow-lg shadow-violet-500/30 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {saving ? 'Saving…' : 'Save Changes'}
+              </button>
+            </div>
             <button
-              onClick={onClose}
-              className="flex-1 px-4 py-2.5 rounded-xl bg-white/8 border border-white/10 text-slate-300 hover:text-white hover:bg-white/12 transition-all font-semibold text-sm"
+              onClick={() => setShowSignOutConfirm(true)}
+              disabled={signingOut}
+              className="w-full px-4 py-2.5 rounded-xl bg-rose-600/20 border border-rose-500/30 hover:bg-rose-600/30 hover:border-rose-500/50 text-rose-400 hover:text-rose-300 font-semibold text-sm transition-all disabled:opacity-60"
             >
-              Close
-            </button>
-            <button
-              onClick={handleSave}
-              disabled={!isDirty || saving}
-              className="flex-1 px-4 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 text-white font-semibold text-sm shadow-lg shadow-violet-500/30 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              {saving ? 'Saving…' : 'Save Changes'}
+              Sign out
             </button>
           </div>
         </div>
       </div>
+
+      {/* Sign-out confirmation dialog */}
+      {showSignOutConfirm && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+          onClick={() => setShowSignOutConfirm(false)}
+        >
+          <div
+            className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl border border-rose-500/40 shadow-2xl max-w-sm w-full p-6 animate-bounce-in"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="text-center mb-5">
+              <div className="flex justify-center mb-3">
+                {user?.photoURL ? (
+                  <img
+                    src={user.photoURL}
+                    alt=""
+                    referrerPolicy="no-referrer"
+                    className="w-14 h-14 rounded-full border-2 border-white/10"
+                  />
+                ) : (
+                  <div className="w-14 h-14 rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-500 flex items-center justify-center text-white text-xl font-black">
+                    {initial}
+                  </div>
+                )}
+              </div>
+              <h3 className="text-lg sm:text-xl font-black text-white mb-1.5">
+                Sign out?
+              </h3>
+              <p className="text-sm text-slate-400">
+                You'll be signed out as{' '}
+                <span className="font-semibold text-white">{displayName}</span>. Your
+                stats stay safe in the cloud and will reappear when you sign back in.
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowSignOutConfirm(false)}
+                disabled={signingOut}
+                className="flex-1 px-4 py-2.5 rounded-xl bg-white/8 border border-white/10 text-slate-300 hover:text-white hover:bg-white/12 transition-all duration-200 font-semibold text-sm disabled:opacity-60"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSignOut}
+                disabled={signingOut}
+                className="flex-1 px-4 py-2.5 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white font-semibold text-sm shadow-lg shadow-rose-500/30 transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                {signingOut ? 'Signing out…' : 'Sign out'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>,
     document.body,
   );
