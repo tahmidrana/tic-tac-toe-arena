@@ -10,16 +10,16 @@ import { type BoardSize } from './BoardSizeSelector';
 import { AIPlayer, Difficulty } from '../utils/aiPlayer';
 import { randomOpponentName } from '../utils/opponentNames';
 
-// Random think time that fits comfortably under the 15s turn timer.
-const randomThinkMs = (): number => 1800 + Math.floor(Math.random() * 5200);
+// Random think time — natural feel for the simulated opponent.
+const randomThinkMs = (): number => 1000 + Math.floor(Math.random() * 1500);
 
 // Weighted random matchmaking wait — feels like a real online queue.
-// 65% quick (2–5s), 25% medium (5–9s), 10% slow (9–15s).
+// 70% quick (0.8–2s), 25% medium (2–3.5s), 5% slow (3.5–5s).
 const randomMatchmakingMs = (): number => {
   const r = Math.random();
-  if (r < 0.65) return 2000 + Math.floor(Math.random() * 3000);
-  if (r < 0.9) return 5000 + Math.floor(Math.random() * 4000);
-  return 9000 + Math.floor(Math.random() * 6000);
+  if (r < 0.7) return 800 + Math.floor(Math.random() * 1200);
+  if (r < 0.95) return 2000 + Math.floor(Math.random() * 1500);
+  return 3500 + Math.floor(Math.random() * 1500);
 };
 
 const SEARCH_MESSAGES = [
@@ -49,6 +49,8 @@ export function TicTacToe() {
   const TURN_SECONDS = 15;
   const [timeLeft, setTimeLeft] = useState(TURN_SECONDS);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
+  const [leaveLoserName, setLeaveLoserName] = useState<string | null>(null);
   // Game is idle (board disabled) until the user explicitly starts a game.
   const [gameStarted, setGameStarted] = useState(false);
   // "Searching for opponent..." overlay before each Random-Player match.
@@ -250,6 +252,21 @@ export function TicTacToe() {
   const requestReset = () => {
     // Always confirm before (re)starting a game.
     setShowResetConfirm(true);
+  };
+
+  const leaveGame = () => {
+    setShowLeaveConfirm(false);
+    // Record loss for the leaving player (current turn holder), win for opponent.
+    if (!gameOver) {
+      const leavingPlayer = isXNext ? player1 : player2;
+      const winningPlayer = isXNext ? player2 : player1;
+      recordLoss(leavingPlayer.id);
+      recordWin(winningPlayer.id);
+      setLeaveLoserName(leavingPlayer.name);
+    }
+    setMatchmaking(false);
+    resetGame();
+    setGameStarted(false);
   };
 
   const confirmReset = () => {
@@ -463,6 +480,14 @@ export function TicTacToe() {
         />
       )}
 
+      {/* Left-game loss notification */}
+      <LossAnimation
+        show={leaveLoserName !== null}
+        playerName={`${leaveLoserName} forfeited`}
+        isPlayerWin={false}
+        onClose={() => setLeaveLoserName(null)}
+      />
+
       {/* Confetti only for PvP wins or AI player wins */}
       {gameMode === 'pvp' && (
         <Confetti trigger={gameOver && winner !== 'draw' && winner !== null} />
@@ -474,11 +499,16 @@ export function TicTacToe() {
       {/* Toolbar: mode toggle + settings */}
       <div className="flex items-center gap-2 sm:gap-3">
         <div className="flex-1 min-w-0">
-          <GameModeSelector selectedMode={gameMode} onModeChange={handleGameModeChange} />
+          <GameModeSelector
+            selectedMode={gameMode}
+            onModeChange={handleGameModeChange}
+            disabled={gameStarted && !gameOver}
+          />
         </div>
         <button
           onClick={() => setShowSettings(true)}
-          className="flex-shrink-0 h-10 w-10 sm:h-auto sm:w-auto sm:px-4 sm:py-2.5 rounded-xl bg-slate-800/80 border border-white/10 text-slate-400 hover:text-white hover:border-violet-500/50 hover:bg-slate-700/80 transition-all duration-200 flex items-center justify-center gap-2 text-sm font-medium"
+          disabled={gameStarted && !gameOver}
+          className={`flex-shrink-0 h-10 w-10 sm:h-auto sm:w-auto sm:px-4 sm:py-2.5 rounded-xl bg-slate-800/80 border border-white/10 text-slate-400 hover:text-white hover:border-violet-500/50 hover:bg-slate-700/80 transition-all duration-200 flex items-center justify-center gap-2 text-sm font-medium ${gameStarted && !gameOver ? 'opacity-40 cursor-not-allowed' : ''}`}
           title="Settings"
         >
           <span>⚙️</span>
@@ -541,7 +571,7 @@ export function TicTacToe() {
             {matchmaking ? (
               <span className="text-violet-300 animate-pulse">Searching for opponent…</span>
             ) : !gameStarted ? (
-              <span className="text-slate-300">Tap <span className="text-violet-400">Start Game</span> to begin</span>
+              <span className="text-slate-400 text-base font-semibold">Ready to play?</span>
             ) : gameOver ? (
               winner === 'draw'
                 ? "It's a Draw! 🤝"
@@ -588,9 +618,23 @@ export function TicTacToe() {
         </div>
 
         {/* Game Board */}
-        <div className="py-5 sm:py-6 w-full flex justify-center overflow-hidden px-3 sm:px-4">
+        <div className="relative py-5 sm:py-6 w-full flex justify-center overflow-hidden px-3 sm:px-4">
+          {/* Start Game overlay */}
+          {!gameStarted && !matchmaking && (
+            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 bg-slate-900/60 backdrop-blur-[2px]">
+              <button
+                onClick={requestReset}
+                className="px-8 py-3 rounded-xl font-bold text-base sm:text-lg bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 text-white shadow-xl shadow-violet-500/40 transition-all duration-200 animate-bounce-in hover:scale-105"
+              >
+                🎮 Start Game
+              </button>
+              <p className="text-xs text-slate-400">
+                {gameMode === 'ai' ? "You'll be matched with a random player" : 'Two players on this device'}
+              </p>
+            </div>
+          )}
           <div
-            className="bg-black/30 rounded-xl border border-white/5"
+            className={`bg-black/30 rounded-xl border border-white/5 transition-opacity duration-300 ${!gameStarted ? 'opacity-20' : ''}`}
             style={{
               display: 'grid',
               gridTemplateColumns: `repeat(${boardSize}, ${squareSize}px)`,
@@ -633,18 +677,26 @@ export function TicTacToe() {
           </div>
         </div>
 
-        <div className="flex justify-center pb-5 sm:pb-6">
-          <button
-            onClick={requestReset}
-            className={`px-7 sm:px-10 py-2.5 sm:py-3 rounded-xl font-bold text-sm sm:text-base transition-all duration-200 ${
-              !gameStarted || gameOver
-                ? 'bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 text-white shadow-lg shadow-violet-500/30 animate-bounce-in'
-                : 'bg-white/6 border border-white/10 text-slate-400 hover:text-white hover:bg-white/10 hover:scale-105'
-            }`}
-          >
-            {!gameStarted ? '🎮 Start Game' : gameOver ? '🎮 Play Again' : 'New Game'}
-          </button>
-        </div>
+        {/* Bottom action area */}
+        {(gameStarted || gameOver) && (
+          <div className="flex justify-center gap-3 pb-5 sm:pb-6">
+            {gameOver ? (
+              <button
+                onClick={requestReset}
+                className="px-7 sm:px-10 py-2.5 sm:py-3 rounded-xl font-bold text-sm sm:text-base bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 text-white shadow-lg shadow-violet-500/30 animate-bounce-in transition-all duration-200"
+              >
+                🎮 Play Again
+              </button>
+            ) : (
+              <button
+                onClick={() => setShowLeaveConfirm(true)}
+                className="px-5 sm:px-7 py-2.5 sm:py-3 rounded-xl font-bold text-sm sm:text-base bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500/20 hover:border-red-400/50 hover:text-red-300 transition-all duration-200"
+              >
+                Leave Game
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Player Stats — portaled to the right column. Opponent is only shown
@@ -770,6 +822,39 @@ export function TicTacToe() {
           )}
         </div>,
         statsSlot,
+      )}
+
+      {/* Leave Game confirmation */}
+      {showLeaveConfirm && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+          onClick={() => setShowLeaveConfirm(false)}
+        >
+          <div
+            className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl border border-red-500/40 shadow-2xl max-w-sm w-full p-6 animate-bounce-in"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="text-center mb-5">
+              <div className="text-4xl mb-3">🚪</div>
+              <h3 className="text-lg sm:text-xl font-black text-white mb-1.5">Leave game?</h3>
+              <p className="text-sm text-slate-400">Your current game progress will be lost.</p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowLeaveConfirm(false)}
+                className="flex-1 px-4 py-2.5 rounded-xl bg-white/8 border border-white/10 text-slate-300 hover:text-white hover:bg-white/12 transition-all duration-200 font-semibold text-sm"
+              >
+                Stay
+              </button>
+              <button
+                onClick={leaveGame}
+                className="flex-1 px-4 py-2.5 rounded-xl bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white font-semibold text-sm shadow-lg shadow-red-500/30 transition-all duration-200"
+              >
+                Leave
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* New Game confirmation */}

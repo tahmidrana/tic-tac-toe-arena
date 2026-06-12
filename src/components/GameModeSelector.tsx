@@ -1,14 +1,17 @@
 export function GameModeSelector({
   selectedMode,
   onModeChange,
+  disabled = false,
 }: {
   selectedMode: 'pvp' | 'ai';
   onModeChange: (mode: 'pvp' | 'ai') => void;
+  disabled?: boolean;
 }) {
   return (
-    <div className="flex bg-slate-800/80 rounded-xl p-1 border border-white/10 shadow-inner gap-1">
+    <div className={`flex bg-slate-800/80 rounded-xl p-1 border border-white/10 shadow-inner gap-1 transition-opacity duration-200 ${disabled ? 'opacity-40 pointer-events-none' : ''}`}>
       <button
         onClick={() => onModeChange('pvp')}
+        disabled={disabled}
         className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold transition-all duration-200 ${
           selectedMode === 'pvp'
             ? 'bg-gradient-to-r from-sky-600 to-blue-600 text-white shadow-md shadow-sky-500/20'
@@ -21,6 +24,7 @@ export function GameModeSelector({
       </button>
       <button
         onClick={() => onModeChange('ai')}
+        disabled={disabled}
         className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold transition-all duration-200 ${
           selectedMode === 'ai'
             ? 'bg-gradient-to-r from-violet-600 to-purple-600 text-white shadow-md shadow-violet-500/20'
