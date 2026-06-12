@@ -596,9 +596,9 @@ export function OnlineGame() {
 
               {/* Join input — expands below when Join Room is clicked */}
               {showJoinInput && (
-                <div className="mt-3 rounded-xl bg-slate-800/80 border border-violet-400/25 p-4 space-y-3">
+                <div className="mt-3 rounded-xl bg-slate-800/80 border border-violet-400/25 p-3 sm:p-4 space-y-3">
                   <p className="text-xs text-slate-400 text-center">Type the 5-digit code your friend shared</p>
-                  <div className="flex gap-2">
+                  <div className="flex flex-col sm:flex-row gap-2">
                     <input
                       type="text"
                       inputMode="numeric"
@@ -608,12 +608,12 @@ export function OnlineGame() {
                       autoFocus
                       onChange={(e) => { setJoinCode(e.target.value.replace(/\D/g, '')); setError(null); }}
                       onKeyDown={(e) => e.key === 'Enter' && handleJoinByCode()}
-                      className="flex-1 px-3 py-3 rounded-xl bg-slate-900 border border-white/15 text-white text-center text-2xl font-black tracking-[0.4em] placeholder:text-slate-700 placeholder:tracking-widest focus:outline-none focus:border-violet-400 transition-colors"
+                      className="flex-1 px-3 py-2.5 sm:py-3 rounded-xl bg-slate-900 border border-white/15 text-white text-center text-xl sm:text-2xl font-black tracking-[0.25em] sm:tracking-[0.4em] placeholder:text-slate-700 placeholder:tracking-widest focus:outline-none focus:border-violet-400 transition-colors"
                     />
                     <button
                       onClick={handleJoinByCode}
                       disabled={joinCode.length !== 5}
-                      className="px-5 py-3 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 disabled:opacity-35 disabled:cursor-not-allowed text-white font-bold text-sm transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] disabled:hover:scale-100"
+                      className="px-4 sm:px-5 py-2.5 sm:py-3 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 disabled:opacity-35 disabled:cursor-not-allowed text-white font-bold text-xs sm:text-sm transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] disabled:hover:scale-100 whitespace-nowrap"
                     >
                       Join
                     </button>
