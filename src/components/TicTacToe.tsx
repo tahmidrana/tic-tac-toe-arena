@@ -8,27 +8,8 @@ import { GameModeSelector } from './GameModeSelector';
 import { SettingsModal } from './SettingsModal';
 import { type BoardSize } from './BoardSizeSelector';
 import { AIPlayer, Difficulty } from '../utils/aiPlayer';
-import { randomOpponentName } from '../utils/opponentNames';
+import { calculateWinner } from '../utils/winLogic';
 
-// Random think time — natural feel for the simulated opponent.
-const randomThinkMs = (): number => 1000 + Math.floor(Math.random() * 1500);
-
-// Weighted random matchmaking wait — feels like a real online queue.
-// 70% quick (0.8–2s), 25% medium (2–3.5s), 5% slow (3.5–5s).
-const randomMatchmakingMs = (): number => {
-  const r = Math.random();
-  if (r < 0.7) return 800 + Math.floor(Math.random() * 1200);
-  if (r < 0.95) return 2000 + Math.floor(Math.random() * 1500);
-  return 3500 + Math.floor(Math.random() * 1500);
-};
-
-const SEARCH_MESSAGES = [
-  'Searching for opponent…',
-  'Looking through online players…',
-  'Finding a worthy opponent…',
-  'Matching by skill level…',
-  'Almost there…',
-];
 
 export function TicTacToe() {
   const { users, recordWin, recordLoss, recordDraw, renameUser } = useGameStore();
@@ -53,10 +34,6 @@ export function TicTacToe() {
   const [leaveLoserName, setLeaveLoserName] = useState<string | null>(null);
   // Game is idle (board disabled) until the user explicitly starts a game.
   const [gameStarted, setGameStarted] = useState(false);
-  // "Searching for opponent..." overlay before each Random-Player match.
-  const [matchmaking, setMatchmaking] = useState(false);
-  const [searchMessage, setSearchMessage] = useState(SEARCH_MESSAGES[0]);
-  const [searchElapsed, setSearchElapsed] = useState(0);
   // Portal target in the right column for player stats.
   const [statsSlot, setStatsSlot] = useState<HTMLElement | null>(null);
   useEffect(() => {
@@ -66,75 +43,6 @@ export function TicTacToe() {
   const player1 = users[0] || { id: '1', name: 'Player 1', wins: 0, losses: 0, draws: 0 };
   const player2 = users[1] || { id: '2', name: 'Random Player', wins: 0, losses: 0, draws: 0 };
 
-  // Get the win length based on board size
-  const getWinLength = (size: number): number => {
-    return size === 3 ? 3 : 4; // 3x3 needs 3 in a row, larger boards need 4
-  };
-
-  const generateWinningLines = (size: number, winLength: number): number[][] => {
-    const lines: number[][] = [];
-    const actualWinLength = winLength || getWinLength(size);
-
-    // Horizontal lines - all possible consecutive sequences
-    for (let row = 0; row < size; row++) {
-      for (let col = 0; col <= size - actualWinLength; col++) {
-        const line: number[] = [];
-        for (let i = 0; i < actualWinLength; i++) {
-          line.push(row * size + col + i);
-        }
-        lines.push(line);
-      }
-    }
-
-    // Vertical lines - all possible consecutive sequences
-    for (let col = 0; col < size; col++) {
-      for (let row = 0; row <= size - actualWinLength; row++) {
-        const line: number[] = [];
-        for (let i = 0; i < actualWinLength; i++) {
-          line.push((row + i) * size + col);
-        }
-        lines.push(line);
-      }
-    }
-
-    // Diagonal (top-left to bottom-right) - all possible sequences
-    for (let startRow = 0; startRow <= size - actualWinLength; startRow++) {
-      for (let startCol = 0; startCol <= size - actualWinLength; startCol++) {
-        const line: number[] = [];
-        for (let i = 0; i < actualWinLength; i++) {
-          line.push((startRow + i) * size + (startCol + i));
-        }
-        lines.push(line);
-      }
-    }
-
-    // Diagonal (top-right to bottom-left) - all possible sequences
-    for (let startRow = 0; startRow <= size - actualWinLength; startRow++) {
-      for (let startCol = actualWinLength - 1; startCol < size; startCol++) {
-        const line: number[] = [];
-        for (let i = 0; i < actualWinLength; i++) {
-          line.push((startRow + i) * size + (startCol - i));
-        }
-        lines.push(line);
-      }
-    }
-
-    return lines;
-  };
-
-  const calculateWinner = (squares: (string | null)[], size: number): { winner: string | null; line: number[] | null } => {
-    const winLength = getWinLength(size);
-    const lines = generateWinningLines(size, winLength);
-
-    for (const line of lines) {
-      const firstSquare = squares[line[0]];
-      if (firstSquare && line.every((index) => squares[index] === firstSquare)) {
-        return { winner: firstSquare, line };
-      }
-    }
-    return { winner: null, line: null };
-  };
-
   const isBoardFull = (squares: (string | null)[]): boolean => {
     return squares.every((square) => square !== null);
   };
@@ -142,41 +50,40 @@ export function TicTacToe() {
   const makeAIMove = (currentBoard: (string | null)[]) => {
     setAiThinking(true);
     setTimeout(() => {
-      const ai = new AIPlayer(difficulty, boardSize);
-      const moveIndex = ai.getMove(currentBoard);
+    const ai = new AIPlayer(difficulty, boardSize);
+    const moveIndex = ai.getMove(currentBoard);
 
-      const newBoard = [...currentBoard];
-      newBoard[moveIndex] = 'O';
+    const newBoard = [...currentBoard];
+    newBoard[moveIndex] = 'O';
 
-      const { winner: gameWinner, line } = calculateWinner(newBoard, boardSize);
-      if (gameWinner) {
-        setWinner(gameWinner);
-        setWinningLine(line);
-        setGameOver(true);
-        // Record win/loss
-        if (gameWinner === 'X') {
-          recordWin(player1.id);
-          recordLoss(player2.id);
-        } else {
-          recordWin(player2.id);
-          recordLoss(player1.id);
-        }
-        setAiThinking(false);
-        return;
+    const { winner: gameWinner, line } = calculateWinner(newBoard, boardSize);
+    if (gameWinner) {
+      setWinner(gameWinner);
+      setWinningLine(line);
+      setGameOver(true);
+      if (gameWinner === 'X') {
+        recordWin(player1.id);
+        recordLoss(player2.id);
+      } else {
+        recordWin(player2.id);
+        recordLoss(player1.id);
       }
-
-      if (isBoardFull(newBoard)) {
-        setGameOver(true);
-        setWinner('draw');
-        recordDraw([player1.id, player2.id]);
-        setAiThinking(false);
-        return;
-      }
-
-      setBoard(newBoard);
-      setIsXNext(true);
       setAiThinking(false);
-    }, randomThinkMs());
+      return;
+    }
+
+    if (isBoardFull(newBoard)) {
+      setGameOver(true);
+      setWinner('draw');
+      recordDraw([player1.id, player2.id]);
+      setAiThinking(false);
+      return;
+    }
+
+    setBoard(newBoard);
+    setIsXNext(true);
+    setAiThinking(false);
+    }, 1000);
   };
 
   const handleClick = (index: number) => {
@@ -264,7 +171,6 @@ export function TicTacToe() {
       recordWin(winningPlayer.id);
       setLeaveLoserName(leavingPlayer.name);
     }
-    setMatchmaking(false);
     resetGame();
     setGameStarted(false);
   };
@@ -273,21 +179,9 @@ export function TicTacToe() {
     setShowResetConfirm(false);
     resetGame();
     if (gameMode === 'ai') {
-      // "Searching for opponent…" flash before each Random Player match.
-      // Wait time is random (up to 15s) so it feels like a real queue.
-      setMatchmaking(true);
-      setSearchElapsed(0);
-      setSearchMessage(SEARCH_MESSAGES[0]);
-      const newOpponent = randomOpponentName();
-      const wait = randomMatchmakingMs();
-      setTimeout(() => {
-        renameUser(player2.id, newOpponent);
-        setMatchmaking(false);
-        setGameStarted(true);
-      }, wait);
-    } else {
-      setGameStarted(true);
+      renameUser(player2.id, 'AI');
     }
+    setGameStarted(true);
   };
 
   const resetGame = () => {
@@ -307,7 +201,7 @@ export function TicTacToe() {
     setGameStarted(false); // mode change should NOT auto-start a game
     // Update player 2 name based on mode
     if (mode === 'ai') {
-      renameUser(player2.id, randomOpponentName());
+      renameUser(player2.id, 'AI');
     } else {
       renameUser(player2.id, 'Player 2');
     }
@@ -347,23 +241,6 @@ export function TicTacToe() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // Rotate the matchmaking message + tick an elapsed counter while searching.
-  useEffect(() => {
-    if (!matchmaking) return;
-    let idx = 0;
-    const msgInterval = setInterval(() => {
-      idx = (idx + 1) % SEARCH_MESSAGES.length;
-      setSearchMessage(SEARCH_MESSAGES[idx]);
-    }, 2200);
-    const tickInterval = setInterval(() => {
-      setSearchElapsed((s) => s + 1);
-    }, 1000);
-    return () => {
-      clearInterval(msgInterval);
-      clearInterval(tickInterval);
-    };
-  }, [matchmaking]);
-
   // Reset the turn timer whenever the active turn changes
   // (board change = a move was just made; mode/end-of-game also resets).
   useEffect(() => {
@@ -376,8 +253,7 @@ export function TicTacToe() {
   const timerActive =
     gameStarted &&
     !gameOver &&
-    !showSettings &&
-    !matchmaking;
+    !showSettings;
 
   // Countdown + auto-play random on timeout.
   useEffect(() => {
@@ -546,31 +422,6 @@ export function TicTacToe() {
             ? 'bg-gradient-to-r from-transparent via-violet-400/50 to-transparent'
             : 'bg-gradient-to-r from-transparent via-white/10 to-transparent'
         }`} />
-        {/* Matchmaking overlay */}
-        {matchmaking && (
-          <div className="absolute inset-0 z-20 bg-slate-900/85 backdrop-blur-md flex items-center justify-center px-6 py-8">
-            <div className="flex flex-col items-center gap-4 text-center animate-bounce-in max-w-xs">
-              <div className="relative w-20 h-20">
-                <div className="absolute inset-0 rounded-full border-4 border-violet-500/20" />
-                <div className="absolute inset-0 rounded-full border-4 border-t-violet-400 border-r-transparent border-b-transparent border-l-transparent animate-spin-fast" />
-                <div className="absolute inset-0 flex items-center justify-center text-2xl">🌐</div>
-              </div>
-              <div>
-                <p className="text-base sm:text-lg font-black text-white transition-opacity duration-300">
-                  {searchMessage}
-                </p>
-                <p className="text-xs text-slate-400 mt-1 tabular-nums">
-                  Elapsed: {searchElapsed}s
-                </p>
-              </div>
-              <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-widest text-violet-300 font-bold">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                Online · {boardSize}×{boardSize}
-              </div>
-            </div>
-          </div>
-        )}
-
         {/* Status bar */}
         <div className="text-center px-4 sm:px-6 pt-5 pb-4 border-b border-white/5">
           <div className="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-2">
@@ -578,9 +429,7 @@ export function TicTacToe() {
             {' · '}{boardSize === 3 ? '3 in a row' : '4 in a row'}
           </div>
           <h2 className={`text-xl sm:text-2xl font-black text-white ${gameOver ? 'animate-bounce-in' : ''}`}>
-            {matchmaking ? (
-              <span className="text-violet-300 animate-pulse">Searching for opponent…</span>
-            ) : !gameStarted ? (
+            {!gameStarted ? (
               <span className="text-slate-400 text-base font-semibold">Ready to play?</span>
             ) : gameOver ? (
               winner === 'draw'
@@ -654,7 +503,7 @@ export function TicTacToe() {
         {/* Game Board */}
         <div className="relative py-6 sm:py-8 w-full flex justify-center overflow-hidden px-3 sm:px-4">
           {/* Start Game overlay */}
-          {!gameStarted && !matchmaking && (
+          {!gameStarted && (
             <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-5"
               style={{ background: 'radial-gradient(ellipse at center, rgba(139,92,246,0.18) 0%, rgba(15,15,30,0.75) 70%)' }}
             >
@@ -669,7 +518,7 @@ export function TicTacToe() {
               <div className="text-center">
                 <p className="text-white font-black text-lg tracking-tight">Ready to Play?</p>
                 <p className="text-xs text-slate-400 mt-1">
-                  {gameMode === 'ai' ? "You'll be matched with a random player" : 'Two players on this device'}
+                  {gameMode === 'ai' ? 'You vs 🤖 AI opponent' : 'Two players on this device'}
                 </p>
               </div>
               <button
@@ -818,11 +667,9 @@ export function TicTacToe() {
                 <div className="min-w-0 flex-1">
                   {gameMode === 'ai' ? (
                     <h3 className="text-xs sm:text-base font-bold text-white truncate flex items-center gap-1.5">
-                      <span
-                        className="inline-block w-2 h-2 rounded-full bg-emerald-400 flex-shrink-0"
-                        title="Online"
-                      />
+                      <span className="text-sm flex-shrink-0">🤖</span>
                       <span className="truncate">{player2.name}</span>
+                      <span className="text-[10px] font-black text-violet-300 flex-shrink-0 px-1.5 py-0.5 rounded-full bg-violet-500/15 border border-violet-400/30">AI</span>
                     </h3>
                   ) : editingPlayer === player2.id ? (
                     <input
@@ -917,14 +764,10 @@ export function TicTacToe() {
                 Start a new game?
               </h3>
               <p className="text-sm text-slate-400">
-                {!gameStarted
+                {!gameStarted || gameOver
                   ? gameMode === 'ai'
-                    ? "We'll find a random player for you to play against."
-                    : 'Ready to play a match?'
-                  : gameOver
-                  ? gameMode === 'ai'
-                    ? "We'll match you with a new opponent."
-                    : 'Begin a fresh round on the same board.'
+                    ? 'A new AI opponent will be assigned.'
+                    : 'Ready to play a fresh match?'
                   : 'Your current game progress will be lost.'}
               </p>
             </div>

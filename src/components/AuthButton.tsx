@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useAuth } from '../store/authStore';
+import { ProfileSettingsModal } from './ProfileSettingsModal';
 
 const GoogleIcon = () => (
   <svg width="16" height="16" viewBox="0 0 18 18" aria-hidden="true">
@@ -28,6 +29,7 @@ export function AuthButton() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showSignOutConfirm, setShowSignOutConfirm] = useState(false);
+  const [showProfile, setShowProfile] = useState(false);
 
   if (!isConfigured) {
     return null; // No Firebase env vars — keep header clean.
@@ -84,7 +86,11 @@ export function AuthButton() {
   return (
     <>
       <div className="flex items-center gap-2">
-        <div className="flex items-center gap-2 px-2 sm:px-3 py-1.5 rounded-xl bg-white/5 border border-white/10">
+        <button
+          onClick={() => setShowProfile(true)}
+          className="flex items-center gap-2 px-2 sm:px-3 py-1.5 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 hover:border-violet-500/40 transition-all duration-200 group"
+          title="Profile settings"
+        >
           {user.photoURL ? (
             <img
               src={user.photoURL}
@@ -100,7 +106,11 @@ export function AuthButton() {
           <span className="text-xs sm:text-sm font-semibold text-white max-w-[100px] sm:max-w-[160px] truncate">
             {displayName}
           </span>
-        </div>
+          <svg className="w-3 h-3 text-slate-500 group-hover:text-violet-400 transition-colors hidden sm:block" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+        </button>
         <button
           onClick={() => setShowSignOutConfirm(true)}
           disabled={busy}
@@ -110,6 +120,8 @@ export function AuthButton() {
           Sign out
         </button>
       </div>
+
+      {showProfile && <ProfileSettingsModal onClose={() => setShowProfile(false)} />}
 
       {showSignOutConfirm && createPortal(
         <div

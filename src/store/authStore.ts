@@ -4,9 +4,11 @@ import {
   signInWithPopup,
   signOut as fbSignOut,
   onAuthStateChanged,
+  updateProfile,
   type User as FirebaseUser,
 } from 'firebase/auth';
-import { auth, isFirebaseConfigured } from '../config/firebase';
+import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { auth, db, isFirebaseConfigured } from '../config/firebase';
 
 /**
  * Tiny shared auth store.
@@ -38,6 +40,7 @@ export interface AuthState {
   isConfigured: boolean;
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
+  updateDisplayName: (name: string) => Promise<void>;
 }
 
 export async function signInWithGoogle(): Promise<void> {
@@ -51,6 +54,23 @@ export async function signInWithGoogle(): Promise<void> {
 export async function signOut(): Promise<void> {
   if (!auth) return;
   await fbSignOut(auth);
+}
+
+export async function updateDisplayName(name: string): Promise<void> {
+  if (!auth?.currentUser) throw new Error('Not signed in');
+  const trimmed = name.trim();
+  if (!trimmed) throw new Error('Name cannot be empty');
+  await updateProfile(auth.currentUser, { displayName: trimmed });
+  // Sync to Firestore users doc so leaderboard reflects the change immediately
+  if (db) {
+    await updateDoc(doc(db, 'users', auth.currentUser.uid), {
+      name: trimmed,
+      updatedAt: serverTimestamp(),
+    });
+  }
+  // Force re-notify all listeners so components pick up the new displayName
+  currentUser = auth.currentUser;
+  notify();
 }
 
 export function useAuth(): AuthState {
@@ -70,5 +90,6 @@ export function useAuth(): AuthState {
     isConfigured: isFirebaseConfigured,
     signInWithGoogle,
     signOut,
+    updateDisplayName,
   };
 }
