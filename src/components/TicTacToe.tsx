@@ -530,12 +530,22 @@ export function TicTacToe() {
 
       {/* Game Card */}
       <div
-        className={`relative rounded-2xl border backdrop-blur-md shadow-xl overflow-hidden transition-all duration-300 ${
+        className={`relative rounded-2xl border backdrop-blur-md shadow-2xl overflow-hidden transition-all duration-300 ${
           gameOver && winner !== 'draw' && winner !== null
-            ? 'bg-slate-900/80 border-yellow-500/30 shadow-yellow-500/10 animate-pulse-board'
-            : 'bg-slate-900/70 border-white/8'
+            ? 'bg-slate-900/90 border-yellow-500/40 shadow-yellow-500/20 animate-pulse-board'
+            : gameStarted && !gameOver
+            ? 'bg-gradient-to-b from-slate-800/95 to-slate-900/95 border-violet-400/35 shadow-lg shadow-violet-500/20'
+            : 'bg-gradient-to-b from-slate-900/80 to-slate-950/80 border-white/8'
         }`}
       >
+        {/* Subtle top glow line */}
+        <div className={`absolute top-0 left-0 right-0 h-px transition-all duration-500 ${
+          gameOver && winner !== 'draw' && winner !== null
+            ? 'bg-gradient-to-r from-transparent via-yellow-400/60 to-transparent'
+            : gameStarted && !gameOver
+            ? 'bg-gradient-to-r from-transparent via-violet-400/50 to-transparent'
+            : 'bg-gradient-to-r from-transparent via-white/10 to-transparent'
+        }`} />
         {/* Matchmaking overlay */}
         {matchmaking && (
           <div className="absolute inset-0 z-20 bg-slate-900/85 backdrop-blur-md flex items-center justify-center px-6 py-8">
@@ -586,7 +596,19 @@ export function TicTacToe() {
             )}
           </h2>
 
-          {/* Turn timer */}
+          {/* Play Again — shown right below result */}
+          {gameOver && (
+            <div className="mt-3">
+              <button
+                onClick={requestReset}
+                className="inline-flex items-center gap-2 px-6 py-2 rounded-xl font-bold text-sm bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 text-white shadow-lg shadow-violet-500/30 animate-bounce-in transition-all duration-200 hover:scale-105"
+              >
+                🎮 Play Again
+              </button>
+            </div>
+          )}
+
+          {/* Turn timer + Leave Game */}
           {timerActive && (
             <div className="mt-3 max-w-[200px] mx-auto">
               <div className="flex items-center justify-between mb-1">
@@ -615,27 +637,65 @@ export function TicTacToe() {
               </div>
             </div>
           )}
+
+          {/* Leave Game — below timer when game is active */}
+          {gameStarted && !gameOver && (
+            <div className="mt-3">
+              <button
+                onClick={() => setShowLeaveConfirm(true)}
+                className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold bg-red-500/10 border border-red-500/25 text-red-400 hover:bg-red-500/20 hover:border-red-400/50 hover:text-red-300 transition-all duration-200"
+              >
+                <span>🚪</span> Leave Game
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Game Board */}
-        <div className="relative py-5 sm:py-6 w-full flex justify-center overflow-hidden px-3 sm:px-4">
+        <div className="relative py-6 sm:py-8 w-full flex justify-center overflow-hidden px-3 sm:px-4">
           {/* Start Game overlay */}
           {!gameStarted && !matchmaking && (
-            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 bg-slate-900/60 backdrop-blur-[2px]">
+            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-5"
+              style={{ background: 'radial-gradient(ellipse at center, rgba(139,92,246,0.18) 0%, rgba(15,15,30,0.75) 70%)' }}
+            >
+              {/* Decorative ring */}
+              <div className="relative flex items-center justify-center">
+                <div className="absolute w-28 h-28 rounded-full border border-violet-500/20 animate-ping" style={{ animationDuration: '2.5s' }} />
+                <div className="absolute w-20 h-20 rounded-full border border-violet-400/30" />
+                <div className="w-14 h-14 rounded-full bg-gradient-to-br from-violet-600/40 to-fuchsia-600/30 flex items-center justify-center text-2xl shadow-xl shadow-violet-500/30">
+                  🎮
+                </div>
+              </div>
+              <div className="text-center">
+                <p className="text-white font-black text-lg tracking-tight">Ready to Play?</p>
+                <p className="text-xs text-slate-400 mt-1">
+                  {gameMode === 'ai' ? "You'll be matched with a random player" : 'Two players on this device'}
+                </p>
+              </div>
               <button
                 onClick={requestReset}
-                className="px-8 py-3 rounded-xl font-bold text-base sm:text-lg bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 text-white shadow-xl shadow-violet-500/40 transition-all duration-200 animate-bounce-in hover:scale-105"
+                className="px-8 py-2.5 rounded-xl font-bold text-sm sm:text-base bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 text-white shadow-xl shadow-violet-500/40 transition-all duration-200 hover:scale-105 border border-violet-400/30"
               >
-                🎮 Start Game
+                Start Game
               </button>
-              <p className="text-xs text-slate-400">
-                {gameMode === 'ai' ? "You'll be matched with a random player" : 'Two players on this device'}
-              </p>
             </div>
           )}
+          {/* Board glow backdrop */}
+          <div className={`absolute inset-4 rounded-3xl transition-all duration-500 blur-3xl pointer-events-none ${
+            gameStarted && !gameOver ? 'bg-violet-500/20' :
+            gameOver && winner === 'X' ? 'bg-sky-400/25' :
+            gameOver && winner === 'O' ? 'bg-rose-400/25' :
+            gameOver && winner === 'draw' ? 'bg-slate-400/15' : 'bg-transparent'
+          }`} />
           <div
-            className={`bg-black/30 rounded-xl border border-white/5 transition-opacity duration-300 ${!gameStarted ? 'opacity-20' : ''}`}
+            className={`relative rounded-2xl transition-opacity duration-300 ${!gameStarted ? 'opacity-20' : ''}`}
             style={{
+              background: gameStarted && !gameOver
+                ? 'linear-gradient(135deg, rgba(139,92,246,0.12) 0%, rgba(30,20,60,0.6) 50%, rgba(139,92,246,0.08) 100%)'
+                : 'linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(0,0,0,0.2) 100%)',
+              boxShadow: gameStarted && !gameOver
+                ? 'inset 0 1px 0 rgba(255,255,255,0.12), 0 0 0 1px rgba(139,92,246,0.3), 0 12px 40px rgba(109,40,217,0.2)'
+                : 'inset 0 1px 0 rgba(255,255,255,0.05), 0 0 0 1px rgba(255,255,255,0.08)',
               display: 'grid',
               gridTemplateColumns: `repeat(${boardSize}, ${squareSize}px)`,
               gap: `${gap}px`,
@@ -656,19 +716,23 @@ export function TicTacToe() {
                     height: `${squareSize}px`,
                     fontSize: `${squareSize * 0.5}px`,
                   }}
-                  className={`rounded-2xl font-black transition-all duration-150 flex items-center justify-center
+                  className={`rounded-xl font-black transition-all duration-150 flex items-center justify-center relative overflow-hidden
                     ${
                       value === 'X'
-                        ? 'bg-sky-500/20 text-sky-300 border-2 border-sky-500/50 animate-bounce-in shadow-lg shadow-sky-500/20'
+                        ? 'bg-gradient-to-br from-sky-400/40 to-sky-600/25 text-sky-200 border border-sky-400/60 animate-bounce-in shadow-lg shadow-sky-400/30'
                         : value === 'O'
-                        ? 'bg-rose-500/20 text-rose-300 border-2 border-rose-500/50 animate-bounce-in shadow-lg shadow-rose-500/20'
-                        : 'bg-white/4 border-2 border-white/10 hover:bg-violet-500/10 hover:border-violet-400/50 hover:shadow-md hover:shadow-violet-500/20 cursor-pointer'
+                        ? 'bg-gradient-to-br from-rose-400/40 to-rose-600/25 text-rose-200 border border-rose-400/60 animate-bounce-in shadow-lg shadow-rose-400/30'
+                        : 'bg-gradient-to-br from-white/10 to-white/5 border border-white/15 hover:from-violet-400/25 hover:to-fuchsia-400/15 hover:border-violet-300/50 hover:shadow-lg hover:shadow-violet-400/25 cursor-pointer'
                     }
-                    ${isWinningSquare ? 'ring-2 ring-yellow-400 bg-yellow-500/25 border-yellow-400/60 shadow-lg shadow-yellow-500/30' : ''}
+                    ${isWinningSquare ? 'ring-2 ring-yellow-400/80 bg-gradient-to-br from-yellow-400/40 to-amber-500/25 border-yellow-400/60 shadow-xl shadow-yellow-400/35 scale-105' : ''}
                     disabled:cursor-not-allowed active:scale-95 hover:scale-105
                   `}
                 >
-                  <span className={isWinningSquare && gameOver ? 'text-yellow-200 drop-shadow-lg' : ''}>
+                  {/* Inner shine */}
+                  {!value && !isWinningSquare && (
+                    <span className="absolute inset-0 bg-gradient-to-b from-white/5 to-transparent rounded-xl pointer-events-none" />
+                  )}
+                  <span className={`relative drop-shadow-md ${isWinningSquare && gameOver ? 'text-yellow-200 drop-shadow-lg' : ''}`}>
                     {value}
                   </span>
                 </button>
@@ -677,26 +741,6 @@ export function TicTacToe() {
           </div>
         </div>
 
-        {/* Bottom action area */}
-        {(gameStarted || gameOver) && (
-          <div className="flex justify-center gap-3 pb-5 sm:pb-6">
-            {gameOver ? (
-              <button
-                onClick={requestReset}
-                className="px-7 sm:px-10 py-2.5 sm:py-3 rounded-xl font-bold text-sm sm:text-base bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 text-white shadow-lg shadow-violet-500/30 animate-bounce-in transition-all duration-200"
-              >
-                🎮 Play Again
-              </button>
-            ) : (
-              <button
-                onClick={() => setShowLeaveConfirm(true)}
-                className="px-5 sm:px-7 py-2.5 sm:py-3 rounded-xl font-bold text-sm sm:text-base bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500/20 hover:border-red-400/50 hover:text-red-300 transition-all duration-200"
-              >
-                Leave Game
-              </button>
-            )}
-          </div>
-        )}
       </div>
 
       {/* Player Stats — portaled to the right column. Opponent is only shown
